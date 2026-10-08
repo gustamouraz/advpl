@@ -1,0 +1,57 @@
+#include "TOTVS.ch"
+
+/*
+@Autor:		Wallyson Silva
+@Data:		28/10/2022
+@Descrição:	Retornar valor do tributo da F2D 
+*/ 
+
+User Function GTRIBVAL(__cTrib, __cIdTrib )
+
+    Local nVal      := 0
+    Local cLike     := ' '
+    Local cWhere    := ""
+    Local cF2D      := GetNextAlias()
+
+    Do Case 
+        Case __cTrib == "FETHAB"
+            cLike := "FET"
+        Case __cTrib == "FASE"
+            cLike := "FAS"
+        Case __cTrib == "IAGRO"
+            cLike := "IAG"
+        Case __cTrib == "IMA"
+            cLike := "IMA"
+        Case __cTrib == "FESA"
+            cLike := "FES"
+        Case __cTrib == "FACS"
+            cLike := "FAC"
+        Case __cTrib == "FABOV"
+            cLike := "FAB"
+        Case __cTrib == "CADPRO" // Luiz
+            cLike := "CAD"
+		Otherwise
+			cLike     := 'XXXXZZZZZZZZ'
+    End Case 
+
+    cWhere := "% F2D_RFIN LIKE '" + cLike + "%' %"
+
+    BeginSql Alias cF2D
+        SELECT
+            SUM(F2D_VALOR) AS TOTAL
+        FROM %Table:F2D% AS F2D
+        WHERE F2D_FILIAL = %Exp:xFilial("F2D")%
+            AND F2D_IDREL = %Exp:__cIdTrib%
+            AND %Exp:cWhere%
+			AND F2D_RFIN <> ''
+            AND F2D.%NotDel%
+        GROUP BY F2D_IDREL
+    EndSql
+
+    (cF2D)->(DbGoTop())
+
+    nVal := IIF((cF2D)->TOTAL != NIL, (cF2D)->TOTAL, 0 )
+
+    (cF2D)->(DbCloseArea())
+
+Return nVal

@@ -1,0 +1,65 @@
+#include "TOTVS.CH"
+
+/*
+@author    Wallyson Silva
+@since     10/05/2022 
+O ponto de entrada utilizado apos gravar a Solicitacao de Compra, para manipular as informacoes nas tabelas:
+SC1: Solicitacao de Compras
+SC7: Pedido de Compras / Autorizacao de Entrega
+CND: Medicao de Contrato
+SW1: Solicitacao de Importacao
+*/
+
+User Function MT106SC1()
+
+    Local aParams := PARAMIXB
+    Local cAlias   := aParams[1]
+    Local nRecno   := 0
+    Local cServico := "N" 
+    Local cUrg := "N" 
+    Local cJusUrg := "" 
+
+    If cAlias == 'SC1' 
+        
+        nRecno := aParams[4]
+
+        cServico    := SCP->CP_XSERVI
+        cUrg        := SCP->CP_YURGENT
+        cJusUrg     := SCP->CP_XJUSURG
+
+        RecLock('SC1', .F.)
+        SC1->C1_XGRUPO  := Posicione('SB1',1,xFilial('SB1') + SC1->C1_PRODUTO, 'B1_GRUPO')
+        SC1->C1_YLEADEM := Dtoc(MsDate()) + Time() //Wendel Barreto  ticket 11393 
+        SC1->C1_ZAPLDIR := 'S'
+        If SC1->C1_ZUPRC <= 0 
+            SC1->C1_ZUPRC := U_ZCDZGCPR(SC1->C1_PRODUTO)
+        Endif
+        If cServico $ "SN"
+            SC1->C1_XSERVI := cServico
+        EndIf
+        If cUrg $ "SN"
+            SC1->C1_YURGENT := cUrg
+        EndIf
+        If !(Empty(cJusUrg))
+            SC1->C1_XJUSURG := cJusUrg
+        EndIf
+        SC1->(MsUnlock()) 
+        If SCP->(RecLock("SCP", .F.))
+            If Empty(SCP->CP_NUMSC)
+                SCP->CP_NUMSC := SC1->C1_NUM
+            EndIf
+
+            If Empty(SCP->CP_ITSC)
+                SCP->CP_ITSC := SC1->C1_ITEM
+            EndIf
+            SCP->(MsUnlock())
+        EndIf
+
+        // Atualiza o vinculo SA x SC no insumo da OS (STL).
+        U_LMATUSTL("SC", SCP->CP_FILIAL, SCP->CP_NUM, SCP->CP_ITEM, SC1->C1_NUM, SC1->C1_ITEM)
+
+        U_ACVLDPCO(SC1->C1_FILIAL, SC1->C1_NUM, 1 , .F. )
+        
+
+    EndIf
+Return 

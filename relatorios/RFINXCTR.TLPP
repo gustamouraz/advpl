@@ -1,0 +1,299 @@
+#INCLUDE "TOTVS.CH"
+
+/*/{Protheus.doc} User Function RFINXCTR
+    Relatrio Contratos Comercial x Financeiro
+    @type  Function
+    @author Wallyson Silva
+    @since 14/06/2022
+    @version 1.0
+    /*/
+
+STATIC ALIGN_LEFT       := 1
+STATIC ALIGN_CENTER     := 2
+STATIC ALIGN_RIGHT      := 3 
+
+STATIC FORMAT_GENERAL   := 1
+//STATIC FORMAT_NUMBER    := 2
+STATIC FORMAT_MONETARIO := 3 
+STATIC FORMAT_DATE := 4
+
+User Function RFINXCTR()
+    
+    Private cRootDir    := IIF(GetOS() == "UNIX","i:\tmp","C:\Temp")
+    Private aColunas    := {}    
+    Private cRFINXCTR   := GetNextAlias()	
+
+    If MsgYesNo("Deseja gerar relatrio Financeiro x Comercial?", "RFINXCTR")
+
+        If !ExistDir( cRootDir, NIL, .F. )
+            MsgAlert("Favor verificar se o diretório " + cRootDir + " existe!", "RFINXCTR")
+            Return NIL
+        EndIf
+
+        If ParamRel("RFINXCTR")
+
+            aFiliais := AdmGetFil(.F.,.F.)
+        
+            If Len(aFiliais) > 0
+
+                cFiliais := AsString(aFiliais)
+                cFiliais := StrTran(cFiliais,"{","'")
+                cFiliais := StrTran(cFiliais,"}","'")
+                cFiliais := StrTran(cFiliais,",","','")
+
+                aAdd(aColunas, { 'FILIAL'           , 'Filial'          , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'CLIENTE'          , 'Cod. Cliente'    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })    
+                aAdd(aColunas, { 'NOME'             , 'Nome Cliente'    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'EMISSAO'          , 'Dt. Emissão'     , ALIGN_LEFT , FORMAT_DATE      , .F. })
+                aAdd(aColunas, { 'VENCIMENTO'       , 'Dt. Vencimento'  , ALIGN_LEFT , FORMAT_DATE      , .F. })
+                aAdd(aColunas, { 'DTBAIXA'          , 'Dt. Baixa'       , ALIGN_LEFT , FORMAT_DATE      , .F. })
+                aAdd(aColunas, { 'PREFIXO'          , 'Prefixo'         , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'TIPO'             , 'Tipo'            , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'NUMERO'           , 'Número'          , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'SAFRA'            , 'Safra'           , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'GRUPO'            , 'Grupo Produto'   , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'CONTRATO_PAI'     , 'Contrato Pai'    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })       
+                aAdd(aColunas, { 'MOEDA_CTR'        , 'Moeda Ctr.'      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'MOEDA_TITULO'     , 'Moeda Tit.'      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'TX_MOEDA_TITULO'  , 'Tx. Moeda Tit.'  , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'TX_MOEDA_DIA'     , 'Tx. Moeda Dia'   , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'TX_MOEDA_BX'      , 'Tx. Moeda Baixa' , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'VALOR_TITULO'     , 'Vlr. Titulo'     , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'VALOR_CONVERTIDO' , 'Vlr. Convertido' , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'SALDO_TITULO'     , 'Saldo Titulo'    , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'VLR_EXTRATO'      , 'Vlr. Extrato'    , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'VLR_CORRECAO'     , 'Vlr. Correção'   , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+                aAdd(aColunas, { 'CUSTO'            , 'Custo'           , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                aAdd(aColunas, { 'DESC_CUSTO'       , 'Desc. Custo'     , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+                
+                Processa({  || ExcelPrintReport("RFINXCTR")},"Gerando Rel. Financeiro x Comercial")
+            Else 
+                MsgAlert("Favor selecionar ao menos uma filial para consulta.", "RFINSE2A")
+            EndIf 
+        EndIf
+    Endif
+
+Return Nil
+  
+  
+
+
+Static Function ExcelPrintReport( __cName )
+
+	Local cError        := ""
+    Local oErrorBlock   := ErrorBlock({|e| cError := e:Description + e:ErrorStack}) 
+    Local nC            := 1
+    Local nAtual        := 0
+    Local nTotal        := 0  
+    Local oExcel 		:= FWMsExcelEx():New()
+    Local cFile			:= ""
+    Local aRowAdd       := {}
+    Local cFiltroFil    := '%('+cFiliais+')%'  
+
+    BeginSql Alias cRFINXCTR
+        %NoParser%
+         
+        SELECT 
+            E1_FILIAL AS 'FILIAL'
+            , E1_CLIENTE AS 'CLIENTE'
+            , A1_NOME AS 'NOME'
+            , CONVERT(CHAR,(CONVERT(DATE,E1_EMISSAO ,3)),3)  AS 'EMISSAO'
+            , CONVERT(CHAR,(CONVERT(DATE,E1_VENCTO ,3)),3)   AS 'VENCIMENTO'
+            , CONVERT(CHAR,(CONVERT(DATE,E1_BAIXA ,3)),3)  AS 'DTBAIXA'
+            , E1_PREFIXO AS 'PREFIXO'
+            , E1_TIPO AS 'TIPO'
+            , E1_NUM AS 'NUMERO'
+            , COALESCE(NJR_CODSAF ,ADA_CODSAF,'') AS 'SAFRA' 
+            , D2_GRUPO AS 'GRUPO' 
+            , E1_XCTRPAI AS 'CONTRATO_PAI'
+            , COALESCE(NJR_MOEDA  ,ADA_MOEDA , ''  ) AS 'MOEDA_CTR'
+            , E1_MOEDA AS 'MOEDA_TITULO' 
+            , E1_TXMOEDA AS 'TX_MOEDA_TITULO'
+            , CASE NJR_MOEDA 
+                WHEN '2' THEN SM2.M2_MOEDA2
+                WHEN '3' THEN SM2.M2_MOEDA3
+            END AS 'TX_MOEDA_DIA'
+            , COALESCE(SE5CM.E5_TXMOEDA,0) AS 'TX_MOEDA_BX'
+            , ROUND(SUM(E1_VALOR),2) AS 'VALOR_TITULO'
+            , CASE E1_MOEDA
+                    WHEN '1' THEN ROUND(SUM(E1_VALOR ),2)
+                    ELSE ROUND((SUM(E1_VALOR )* E1_TXMOEDA),2) 
+            END AS 'VALOR_CONVERTIDO'
+            , CASE  E1_MOEDA
+                WHEN '1' THEN ROUND(SUM(E1_SALDO ),2)
+                ELSE ROUND((SUM(E1_SALDO )* E1_TXMOEDA),2) 
+            END AS 'SALDO_TITULO' ,
+            CASE E1_TIPO
+                WHEN 'RA'  THEN
+                    CASE  E1_MOEDA
+                        WHEN '1' THEN ROUND(SUM(E1_VALOR  ),2)
+                        ELSE ROUND((SUM(E1_VALOR  )* E1_TXMOEDA),2) 
+                    END  
+                WHEN 'NCC' THEN
+                    CASE  E1_MOEDA
+                        WHEN '1' THEN ROUND(SUM(E1_VALOR  ),2)
+                        ELSE ROUND((SUM(E1_VALOR  )* E1_TXMOEDA),2) 
+                    END  
+                WHEN 'NF' THEN ROUND(SUM(E1_VALOR - E1_FACS - E1_FABOV - E1_FETHAB ) * - 1,2)
+                ELSE 0
+            END AS 'VLR_EXTRATO'
+            , COALESCE(SE5CM.E5_VALOR,0) AS 'VLR_CORRECAO'
+            , CASE E1_TIPO       
+                WHEN 'RA' THEN E1_CCUSTO
+                WHEN 'NF' THEN B1_CC
+                WHEN 'NCC' THEN COALESCE(D1_CC,E1_CCUSTO)
+                ELSE E1_CCUSTO
+            END AS 'CUSTO'
+            ,  CTT_DESC01 AS 'DESC_CUSTO'
+        FROM %Table:SE1% AS SE1 WITH (NOLOCK)
+        LEFT JOIN %Table:NJR% AS NJR  WITH (NOLOCK)
+            ON  NJR_XCTPAI = E1_XCTRPAI 
+            AND NJR_XCTPAI != ''
+            AND NJR_XPAI = '1'
+            AND NJR.%NotDel% 
+        LEFT JOIN %Table:ADA% AS ADA  WITH (NOLOCK)
+            ON ADA_XCTPAI = E1_XCTRPAI
+            AND ADA_XCTPAI != ''
+            AND ADA_XPAI = '1'
+            AND ADA.%NotDel%
+        LEFT JOIN %Table:SD2% AS SD2  WITH (NOLOCK)
+            ON D2_FILIAL = E1_FILORIG
+            AND D2_SERIE = E1_SERIE
+            AND D2_DOC = E1_NUM
+            AND D2_CLIENTE = E1_CLIENTE
+            AND D2_LOJA = E1_LOJA
+            AND D2_ITEM = '01' //Considerar custo do primeiro item da NF
+            AND SD2.%NotDel%
+        LEFT JOIN %Table:SD1% AS SD1  WITH (NOLOCK)
+            ON D1_FILIAL = E1_FILORIG
+            AND D1_SERIE = E1_SERIE
+            AND D1_DOC = E1_NUM
+            AND D1_FORNECE = E1_CLIENTE
+            AND D1_LOJA = E1_LOJA
+            AND D1_ITEM = '0001' //Considerar custo do primeiro item da NF
+            AND SD1.%NotDel%
+        LEFT JOIN %Table:SE5% AS SE5CM
+            ON SE5CM.E5_FILIAL = SE1.E1_FILIAL
+            AND SE5CM.E5_DOCUMEN = SE1.E1_PREFIXO+SE1.E1_NUM+SE1.E1_PARCELA+SE1.E1_TIPO+SE1.E1_LOJA 
+            AND SE5CM.E5_TIPODOC = 'CM'
+            AND SE5CM.%NotDel%
+        LEFT JOIN  %Table:SB1% AS SB1  WITH (NOLOCK)
+            ON B1_COD = D2_COD
+        LEFT JOIN  %Table:CTT% AS CTT  WITH (NOLOCK)
+            ON CTT_CUSTO = COALESCE(B1_CC,D1_CC,E1_CCUSTO)
+        LEFT JOIN  %Table:SM2%  AS SM2  WITH (NOLOCK)
+            ON M2_DATA = E1_EMISSAO
+            AND SM2.%NotDel%
+        INNER JOIN  %Table:SA1% AS SA1  WITH (NOLOCK)
+            ON A1_COD = E1_CLIENTE
+            AND A1_LOJA = E1_LOJA
+            AND SA1.D_E_L_E_T_ =''
+        WHERE  E1_FILORIG IN %Exp:cFiltroFil%
+            AND E1_CLIENTE BETWEEN %Exp:MV_PAR01% AND %Exp:MV_PAR02%
+            AND E1_TIPO IN ('RA', 'NF', 'NCC', 'AB-','CF-','CS-','FB-','FC-','FE-','FM-','FP-','FU-','I2-','IM-','IN-','IR-','IS-','PI-' ) 
+            AND E1_EMISSAO BETWEEN %Exp:MV_PAR03% AND %Exp:MV_PAR04%
+            //AND E1_XCTRPAI = '010102020314'
+            AND SE1.%NotDel%  
+        GROUP BY  E1_FILIAL, E1_CLIENTE, A1_NOME, E1_EMISSAO, E1_VENCTO,E1_BAIXA, SE5CM.E5_VALOR, SE5CM.E5_TXMOEDA, E1_PREFIXO, E1_TIPO,E1_PARCELA, E1_NUM, E1_XCTRPAI, E1_MOEDA,M2_MOEDA2, D2_GRUPO, E1_CCUSTO, E1_MOEDA, E1_TIPO, D1_CC, NJR_CODSAF, ADA_CODSAF, NJR_MOEDA, ADA_MOEDA, E1_TXMOEDA, B1_CC, CTT_DESC01 ,SM2.M2_MOEDA3
+        ORDER BY E1_FILIAL, E1_EMISSAO , E1_NUM, E1_TIPO
+    EndSql 
+
+    MemoWrite("C:\Temp\rfinxctr.sql",GetLastQuery()[2])
+
+    (cRFINXCTR)->(DbGoTop())
+    Count to nTotal
+	ProcRegua(nTotal) 
+    (cRFINXCTR)->(DbGoTop())
+ 	
+    If Empty(cError)
+
+        oExcel:SetTitleSizeFont(11) //Define tamanho da fonte do titulo 
+        oExcel:SetTitleBold(.T.) //Define o titulo como em negrito
+        
+        cNomePlan		:= "FINXCTR"
+        cTituloPlan		:= "Relatório Financeiro x Comercial"
+        
+        oExcel:AddworkSheet(cNomePlan)
+        oExcel:AddTable(cNomePlan,cTituloPlan)
+
+        For nC := 1 To Len(aColunas)
+            oExcel:AddColumn(cNomePlan,cTituloPlan,aColunas[nC][2],aColunas[nC][3],aColunas[nC][4],aColunas[nC][5])
+        Next nC
+
+        While (cRFINXCTR)->(!EOF())
+
+            If !Empty(cError)
+                Exit
+            EndIf
+            
+            nAtual++
+
+           IncProc( "Imprimindo Registro - " + cValToChar(nAtual) + " de " + cValToChar( nTotal ) + "..." )
+ 
+            For nC := 1 To Len(aColunas) 
+                Aadd(aRowAdd, (cRFINXCTR)->&(aColunas[nC][1]))
+            Next nC           
+
+            oExcel:AddRow(cNomePlan,cTituloPlan, aRowAdd)
+            aRowAdd := {}
+            
+            (cRFINXCTR)->(DBSkip())
+        EndDo 
+    
+
+        (cRFINXCTR)->(DbCloseArea())
+    EndIf
+
+     
+    If !Empty(cError)
+        ApMsgInfo(cError)
+    else
+        If oExcel:nRows > 0
+            IncProc( "Salvando XML..." )
+            oExcel:Activate()
+            cFile := cRootDir + "\" + __cName + "_" + DToS(Date())+StrTran(Time(),':','')+'.xml'
+            oExcel:GetXMLFile(cFile)
+            MsgInfo("Arquivo salvo em " + cFile, "Sucesso")
+            shellExecute("Open", IIF(GetOS() == "UNIX","/Applications/Microsoft\ Excel.app","excel"), cFile, cRootDir, 1 )
+        Else
+            MsgAlert("Nenhum registro encontrato nos parâmetros informados.", "RFINXCTR")
+        EndIf
+    EndIf 
+
+    ErrorBlock(oErrorBlock)
+
+    FreeObj(oExcel)
+    oExcel := NIL 
+
+Return Nil
+ 
+
+Static Function GetOS()
+    local stringOS := Upper(GetRmtInfo()[2])
+
+    if GetRemoteType() == 0 .or. GetRemoteType() == 1
+        return "WINDOWS"
+    elseif GetRemoteType() == 2 
+        return "UNIX" // Linux ou MacOS		
+    elseif GetRemoteType() == 5 
+        return "HTML" // Smartclient HTML		
+    elseif ("ANDROID" $ stringOS)
+        return "ANDROID" 
+    elseif ("IPHONEOS" $ stringOS)
+        return "IPHONEOS"
+    endif    
+return ""
+
+Static Function ParamRel( cTitle )
+
+    Local lRet      := .F.
+    Local aParam    := {}  
+ 
+    aAdd(aParam, { 1, "Cliente de:"        ,/*init*/ Space(6) , "", /*valid*/".T.", "SA1",/*when*/ ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Cliente até:"       ,/*init*/ Space(6) , "", /*valid*/".T.", "SA1",/*when*/ ".T.", 80, .T.})
+    aAdd(aParam, { 1, "Emisso de:"        ,/*init*/ FirstDate(Date()) , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Emisso até:"       ,/*init*/ LastDate(Date())  , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .T.})
+  
+    lRet := ParamBox(aParam, cTitle)
+
+Return lRet

@@ -1,0 +1,261 @@
+#include "totvs.ch"
+#include 'protheus.ch'
+#include 'parmtype.ch' 
+#include 'report.ch'
+ 
+
+#define ALIGN_LEFT       1
+#define ALIGN_CENTER     2
+#define ALIGN_RIGHT      3 
+
+#define FORMAT_GENERAL   1
+#define FORMAT_NUMBER    2
+#define FORMAT_MONETARIO 3 
+#define FORMAT_DATETIME  4
+
+User Function RPMCSC09()
+
+    Local cName     := "RPMCSC09"  
+    
+    Private cRPMCSC09   := ""  
+    Private cFiliais    := ""
+    Private cRootDir    := IIF(GetOS() == "UNIX","i:\tmp","C:\Temp")
+    Private aColunas    := {}    
+    
+    If MsgYesNo("Deseja gerar relatório Lead KPI Pedidos Compras?", "RPMCSC09")
+
+        If !ExistDir( cRootDir, NIL, .F. )
+            MsgAlert("Favor verificar se o diretório " + cRootDir + " existe!", "RPMCSC09")
+            Return NIL
+        EndIf 
+        If ParamRel(cName) 
+            cRPMCSC09   := GetNextAlias()	 
+            GenerateCells()
+            Processa({|| ExcelPrintReport( "RPMCSC09")},"Gerando Rel. Lead KPI Pedidos Compras") 
+        EndIf
+    EndIf 
+
+Return
+
+ 
+Static Function ExcelPrintReport( __cName )
+
+	Local cError        := ""
+    Local oErrorBlock   := ErrorBlock({|e| cError := e:Description + e:ErrorStack}) 
+    Local nC            := 1
+    Local nAtual        := 0
+    Local nTotal        := 0  
+    Local oExcel 		:= FWMsExcelEx():New()
+    Local cFile			:= ""
+    Local aRowAdd       := {} 
+ 
+    
+    BeginSql Alias cRPMCSC09 
+        %NoParser%         
+		SELECT  
+			C7_FILIAL, C7_NUM,
+			CONVERT(CHAR,(CONVERT(DATE,C7_EMISSAO,103)),103) AS C7_EMISSAO,  SUPC.USR_CODIGO AS 'COMPRADOR',
+			CONVERT(CHAR,(CONVERT(DATE,APROVPC.CR_DATALIB,103)),103) AS 'DT_APROV_PC', DATEDIFF(day,C7_EMISSAO, APROVPC.CR_DATALIB) AS DIA_APROVPC,
+			C7_FORNECE, C7_LOJA, A2_NOME, C7_ITEM, C7_PRODUTO, C7_DESCRI, C7_UM, 
+			C7_QUANT, C7_PRECO, C7_TOTAL, C7_QUJE, 
+			(C7_QUANT - C7_QUJE) AS SALDO_PEDIDO,  
+			C7_QTSEGUM, C7_SEGUM,  
+			C7_NUMSC, C1_SOLICIT,
+			C1_NOMAPRO, 
+			CONVERT(CHAR,(CONVERT(DATE,C1_EMISSAO,103)),103) AS C1_EMISSAO, 
+			CONVERT(CHAR,(CONVERT(DATE,C1_XTDAPR,103)),103) AS C1_XTDAPR, 
+			DATEDIFF(day,C1_EMISSAO,C1_XTDAPR) AS DIA_APROVSC,
+			C7_OBS,
+			C7_CC,
+			CASE C7_CONAPRO
+				WHEN 'R' THEN C7_CONAPRO + ' - Rejeitado'
+				WHEN 'B' THEN C7_CONAPRO + ' - Bloqueado'
+				WHEN 'L' THEN C7_CONAPRO + ' - Liberado'
+				ELSE C7_CONAPRO
+			END AS  'SITUACAO',
+			C7_RESIDUO, C7_YURGENT, C1_XSERVI,
+			SD1.D1_DOC, SD1.D1_SERIE,  
+			CONVERT(CHAR,(CONVERT(DATE,SD1.D1_EMISSAO,103)),103)  D1_EMISSAO,
+			CONVERT(CHAR,(CONVERT(DATE,SD1.D1_DTDIGIT,103)),103)  D1_DTDIGIT,
+			DATEDIFF(day,SD1.D1_EMISSAO,SD1.D1_DTDIGIT) AS DIA_ENTRADANF,
+			SD1.D1_TRANSIT
+		FROM SC7010 SC7 WITH (NOLOCK)
+		INNER JOIN (
+			SELECT CR_FILIAL, CR_NUM, MAX(CR_NIVEL) AS CR_NIVEL, MAX(CR_DATALIB) AS CR_DATALIB 
+			FROM SCR010 WITH (NOLOCK)
+			WHERE D_E_L_E_T_ = ''
+			GROUP BY CR_FILIAL, CR_NUM ) APROVPC
+			ON APROVPC.CR_FILIAL = SC7.C7_FILIAL
+			AND APROVPC.CR_NUM = SC7.C7_NUM  
+		INNER JOIN SC1010 SC1 WITH (NOLOCK)
+			ON C1_FILIAL = C7_FILIAL
+			AND C1_NUM = C7_NUMSC
+			AND C1_ITEM = C7_ITEMSC
+			AND C1_PRODUTO = C7_PRODUTO
+			AND SC1.D_E_L_E_T_ = ''
+		INNER JOIN SYS_USR SUPC
+			ON SUPC.USR_ID = C7_USER
+		INNER JOIN SA2010 A2 WITH (NOLOCK)
+			ON A2_COD = C7_FORNECE
+			AND A2_LOJA = C7_LOJA
+			AND A2.D_E_L_E_T_ = ''
+		OUTER APPLY (
+			SELECT TOP 1 D1_DOC, D1_SERIE, D1_EMISSAO, D1_DTDIGIT, D1_TRANSIT
+			FROM SD1010 SD1 WITH(NOLOCK)
+			WHERE SD1.D_E_L_E_T_ = ''
+			  AND SD1.D1_FILIAL = SC7.C7_FILIAL
+			  AND SD1.D1_PEDIDO = SC7.C7_NUM
+			  AND SD1.D1_ITEMPC = SC7.C7_ITEM
+			  AND SD1.D1_FORNECE = SC7.C7_FORNECE
+			  AND SD1.D1_LOJA = SC7.C7_LOJA
+		) SD1
+			WHERE  C7_EMISSAO BETWEEN %Exp:DToS(MV_PAR01)% AND   %Exp:DToS(MV_PAR02)% 
+				AND C7_APROV BETWEEN %Exp:MV_PAR03% AND %Exp:MV_PAR04%
+				AND C7_CC BETWEEN %Exp:MV_PAR05% AND %Exp:MV_PAR06%
+				AND C7_FILIAL BETWEEN %Exp:MV_PAR07% AND %Exp:MV_PAR08%
+				AND SC7.D_E_L_E_T_ = ''
+			ORDER BY 1,2,C7_ITEM
+
+ 
+    EndSql
+
+     If Empty(cError)
+
+        oExcel:SetTitleSizeFont(11) //Define tamanho da fonte do titulo 
+        oExcel:SetTitleBold(.T.) //Define o titulo como em negrito
+        
+        cNomePlan		:= "PEDIDOS"
+        cTituloPlan		:= "PEDIDOS"
+        
+        oExcel:AddworkSheet(cNomePlan)
+        oExcel:AddTable(cNomePlan,cTituloPlan)
+        
+        For nC := 1 To Len(aColunas)
+            oExcel:AddColumn(cNomePlan,cTituloPlan,aColunas[nC][2],aColunas[nC][3],aColunas[nC][4],aColunas[nC][5])
+        Next nC
+
+        While (cRPMCSC09)->(!EOF())
+
+            If !Empty(cError)
+                Exit
+            EndIf
+            
+            nAtual++
+
+           IncProc( "Imprimindo Registro - " + cValToChar(nAtual) + " de " + cValToChar( nTotal ) + "..." )
+ 
+            For nC := 1 To Len(aColunas) 
+                Aadd(aRowAdd, (cRPMCSC09)->&(aColunas[nC][1])) 
+            Next nC           
+
+            oExcel:AddRow(cNomePlan,cTituloPlan, aRowAdd)
+            aRowAdd := {}
+            
+            (cRPMCSC09)->(DBSkip())
+        EndDo 
+    
+
+        (cRPMCSC09)->(DbCloseArea())
+    EndIf
+
+    ErrorBlock(oErrorBlock)
+
+     If !Empty(cError)
+        MsgInfo(cError, "RPMCSC09") 
+    else
+        If oExcel:nRows > 0
+            IncProc( "Salvando XML..." )
+            oExcel:Activate()
+            cFile := cRootDir + "\" + __cName + "_" + DToS(Date())+StrTran(Time(),':','')+'.xml'
+            oExcel:GetXMLFile(cFile)
+            MsgInfo("Arquivo salvo em " + cFile, "Sucesso")
+            shellExecute("Open", IIF(GetOS() == "UNIX","/Applications/Microsoft\ Excel.app","excel"), cFile, cRootDir, 1 )
+        Else
+            MsgAlert("Nenhum registro encontrato nos parmetros informados.", "RPMCSC09")
+        EndIf
+    EndIf 
+
+    FreeObj(oExcel)
+    oExcel := NIL 
+Return 
+
+
+Static Function GenerateCells()
+
+ 
+    Aadd(aColunas, { "C7_FILIAL"        , "Fiial"           , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_NUM"           , "Pedido"          , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_EMISSAO"       , "Dt.Emissao"      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "COMPRADOR"        , "Comprador"       , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "DT_APROV_PC"      , "Dt.Aprovacao"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "DIA_APROVPC"      , "Dia p/ Aprov"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_FORNECE"       , "Cod. Fornece"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_LOJA"          , "Loja"            , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "A2_NOME"          , "Nome Fornece"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_ITEM"          , "Item"            , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_PRODUTO"       , "Cod. Produto"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_DESCRI"        , "Descri. Prod"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_UM"            , "Unid. Medida"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_QTSEGUM"       , "Qtd. 2Unid"      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_SEGUM"         , "Segunda Unid."   , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_QUANT"         , "Quantidade"      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_PRECO"         , "Preço"           , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_TOTAL"         , "Vlr. Total"      , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_QUJE"          , "Qtd. Entrege"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "SALDO_PEDIDO"     , "Saldo Pedido"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })    
+    Aadd(aColunas, { "C7_NUMSC"         , "Num. SC"         , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C1_SOLICIT"       , "Solicitante"     , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C1_NOMAPRO"       , "Aprovador SC"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C1_EMISSAO"       , "Dt. Emissao SC"  , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C1_XTDAPR"        , "Dt. Aprov. SC"   , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "DIA_APROVSC"      , "Dia p/ Aprov SC" , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_OBS"           , "Observações"     , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_CC"            , "Centro de Custo" , ALIGN_LEFT , FORMAT_GENERAL   , .F. })       
+    Aadd(aColunas, { "C7_RESIDUO"       , "Resíduo?"        , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C7_YURGENT"       , "Urgente?"        , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "C1_XSERVI"        , "Serviço?"        , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "D1_DOC"           , "Documento"       , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "D1_SERIE"         , "Serie"           , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "D1_EMISSAO"       , "Dt.Emissao NF"   , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "D1_DTDIGIT"       , "Dt.Digitacao"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "DIA_ENTRADANF"    , "Dia p/ Entrada"  , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    Aadd(aColunas, { "D1_TRANSIT"       , "Em Transito?"    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+Return
+ 
+ Static Function GetOS()
+    local stringOS := Upper(GetRmtInfo()[2])
+
+    if GetRemoteType() == 0 .or. GetRemoteType() == 1
+        return "WINDOWS"
+    elseif GetRemoteType() == 2 
+        return "UNIX" // Linux ou MacOS		
+    elseif GetRemoteType() == 5 
+        return "HTML" // Smartclient HTML		
+    elseif ("ANDROID" $ stringOS)
+        return "ANDROID" 
+    elseif ("IPHONEOS" $ stringOS)
+        return "IPHONEOS"
+    endif    
+return ""
+
+
+
+Static Function ParamRel( cTitle )
+
+    Local lRet      := .F.
+    Local aParam    := {}  
+      
+    aAdd(aParam, { 1, "Dt. Emissão de:"     , FirstDate(Date())             , "@D", /*valid*/".T.", "",/*when*/ ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Dt. Emissão até:"    , LastDate(Date())              , "@D", /*valid*/".T.", "",/*when*/ ".T.", 80, .T.}) 
+    aAdd(aParam, { 1, "Grupo Aprovação De"  , Space(TamSX3('C7_APROV')[01]) ,  "", ".T.", "SAL", ".T.", 80,  .F.})
+    aAdd(aParam, { 1, "Grupo Aprovação Até" , PADR("Z",TamSX3('C7_APROV')[01],"Z") ,  "", ".T.", "SAL", ".T.", 80,  .T.})  
+    //aAdd(aParam, { 1, "Centro de custo De"   ,Space(TamSX3('C7_CC')[01])   , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .F.})
+    //aAdd(aParam, { 1, "Centro de custo Até"  ,Space(TamSX3('C7_CC')[01])   , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .T.})  
+    aAdd(aParam, { 1, "Centro de custo De"  , Space(4), "", ".T.", "", ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Centro de custo Até" , Space(4), "", ".T.", "", ".T.", 80, .T.})
+    aAdd(aParam, { 1, "Filial de:"          ,/*init*/ Space(TamSX3('C7_FILIAL')[01])   , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Filial até:"         ,/*init*/ PADR("9",TamSX3('C7_FILIAL')[01],"9")   , "", /*valid*/".T.", "",/*when*/ ".T.", 80, .T.})
+
+    lRet := ParamBox(aParam, cTitle)
+
+Return lRet

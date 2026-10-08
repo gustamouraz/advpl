@@ -1,0 +1,587 @@
+#INCLUDE "TOTVS.CH"
+
+/*/{Protheus.doc} RSFT006W
+    Relatrio NF  RELATORIO NFS Saida/Entradas SFT
+    @author Wallyson Silva
+    @since 13/04/2023
+    @version 0.1
+/*/
+
+#define MSGET           1
+#define COMBO           2
+#define RADIO           3
+#define SAYCHKBOX       4
+#define CHKBOX          5
+#define FILE            6
+#define FILTRO          7
+#define PASSWORD        8
+
+
+
+STATIC ALIGN_LEFT       := 1
+STATIC ALIGN_CENTER     := 2
+STATIC ALIGN_RIGHT      := 3 
+
+STATIC FORMAT_GENERAL   := 1
+//STATIC FORMAT_NUMBER    := 2
+STATIC FORMAT_MONETARIO := 3 
+
+
+
+User Function RSFT006W()
+ 
+    Local cPerg         := "RSFT006W" 
+    Local aFiliais      := {}
+
+    Private cRootDir    := IIF(GetOS() == "UNIX","i:\tmp","C:\Temp")
+    Private aColunas    := {}
+    Private cRSFT006W   := GetNextAlias()
+    Private cFiliais    := ""
+
+ 
+   If !ExistDir( cRootDir, NIL, .F. )
+        MsgAlert("Favor verificar se o diretorio " + cRootDir + " existe!", "RSFT006W")
+        Return NIL
+    EndIf
+
+    // //Abre a tela de perguntas do Protheus
+    If !ParamRel(PadR( cPerg , 10))
+        Return NIL
+    EndIf    
+    
+
+    aFiliais    := AdmGetFil(.F.,.F.)
+    cFiliais    := fArr2String(aFiliais)
+
+    If Empty(cFiliais)
+        MsgAlert("Favor selecionar ao menos uma filial para consulta.", "RSFT006W")
+        Return NIL
+    EndIf 
+     
+    aAdd(aColunas, {  "EMPRESA"			, "Empresa "            	, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_FILIAL"		, "Filial "             	, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "M0_FILIAL"		, "Razao Social "			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_ENTRADA"		, "Dt. Entrada "			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_EMISSAO"		, "Dt Emissao "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "TIPOMOV"			, "Tipo Mov. "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "TIPO_NF"			, "Tipo NF "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_ESPECIE"		, "Especie "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_NFISCAL"		, "Documento "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_SERIE"		, "Serie "					, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "D2_NFORI"		, "Nf. Origem "				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "D2_SERIORI"		, "Serie. Origem "			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_CLIEFOR"		, "Cliente/Fornecedor"		, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_LOJA"			, "Loja"					, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "AX_NOME"			, "Nome Cli/For"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "AX_TIPO"			, "Tipo Cli/For"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_ESTADO"		, "Estado Cli/For"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_CFOP"			, "CFOP"					, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "DESC_CFOP"		, "Descri. CFOP"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "D2_CCUSTO"		, "Centro Custo"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "DESC_CC"			, "Descri. C.Custo"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "D2_GRUPO"		, "Grp. Produto"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "BM_DESC"			, "Descri. Grupo"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_PRODUTO"		, "Produto"					, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "B1_DESC"			, "Descri. Produto"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "D2_QUANT"		, "Quantidade"              , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "D2_PRUNIT"		, "Preco Unit."				, ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "D2_TOTAL"		, "Total Produtos"          , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "D2_VALICM"		, "Valor ICMS"              , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "D2_VALIPI"		, "Valor IPI"               , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "FT_VALCONT"		, "Vlr Contabil"            , ALIGN_LEFT , FORMAT_MONETARIO , .F. })
+    aAdd(aColunas, {  "B1_CONTA"		, "Conta Produto"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "DESC_CONTA"		, "Descri. Conta"			, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "NCM"			    , "NCM Produto"				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_DTCANC"		, "Dt Cancelamento "	    , ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_OBSERV"		, "Observacao"				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "FT_CHVNFE"		, "Chave NFe"				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "BASE_PIS"		, "Base PIS"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_PIS"		, "Aliq. PIS"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_PIS"		, "Valor PIS"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "CST_PIS"			, "CST PIS"					, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "BASE_COF"		, "Base COFINS"             , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_COF"		, "Aliq. COFINS"            , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_COF"		, "Valor COFINS"            , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "CST_COF"			, "CST COINS"				, ALIGN_LEFT , FORMAT_GENERAL   , .F. })
+    aAdd(aColunas, {  "BASE_ICM"		, "Base ICM"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_ICM"		, "Aliq. ICM"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_ICM"		, "Valor ICM"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_ICM_COM"	, "Valor ICM Compl."		, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_CSL"		, "Base CSL"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_CSL"		, "Aliq. CSL"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_CSL"		, "Valor CSL"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_INS"		, "Base INS"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_INS"		, "Aliq. INS"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_INS"		, "Valor INS"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_IPI"		, "Base IPI"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_IPI"		, "Aliq. IPI"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_IPI"		, "Valor IPI"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FABOV"		, "Base FABOV"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FABOV"		, "Aliq. FABOV"           	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_FAB"		, "Valor FABOV"       		, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_SENAR"		, "Base SENAR"           	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_SENAR"		, "Aliq. SENAR"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_SENAR"		, "Valor SENAR"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FUNRURAL"	, "Base FUNRURAL"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FUNRURAL"	, "Aliq. FUNRURAL"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_FUNRURAL"	, "Valor FUNRURAL"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FAMAD"		, "Base FAMAD"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FAMAD"		, "Aliq. FAMAD"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VALOR_FAMAD"		, "Valor FAMAD"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FACS"		, "Base FACS"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FACS"		, "Aliq. FACS"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "FACS"			, "Valor FACS"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FASEMT"		, "Base FASEMT"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FASEMT"		, "Aliq. FASEMT"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "FASEMT"			, "Valor FASEMT"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FESAMT"		, "Base FASEMT"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FESAMT"		, "Aliq. FASEMT"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "FESAMT"			, "Valor FASEMT"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_FETHAB"		, "Base FETHAB"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_FETHAB"		, "Aliq. FETHAB"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "FETHAB"			, "Valor FETHAB"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_IMAMT"		, "Base IMAMT"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_IMAMT"		, "Aliq. IMAMT"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "IMAMT"			, "Valor IMAMT"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BASE_IRF"		, "Base IRF"               	, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "ALIQ_IRF"		, "Aliq. IRF"               , ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "IRF"				, "Valor IRF"				, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BRETPIS"			, "Base Ret. PIS"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BRETCOF"			, "Base Ret. Cofins"		, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "BRETCSL"			, "Base Ret. CSLL"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VRETPIS"			, "Valor Ret. PIS"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VRETCOF"			, "Valor Ret. Cofins"		, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+    aAdd(aColunas, {  "VRETCSL"			, "Valor Ret. CSLL"			, ALIGN_LEFT , FORMAT_MONETARIO   , .F. })
+
+    Processa({  || ExcelPrintReport( "RSFT006W")},"Gerando Rel. NFs Entrada/Saida")
+Return
+
+
+Static Function ExcelPrintReport( __cName )
+
+	Local cError        := ""
+    Local oErrorBlock   := ErrorBlock({|e| cError := e:Description + e:ErrorStack}) 
+    Local nC            := 1
+    Local nAtual        := 0
+    Local nTotal        := 0  
+    Local oExcel 		:= FWMsExcelEx():New()
+    Local cFile			:= ""
+    Local aRowAdd       := {}
+    Local cFiltroFil    := '%('+cFiliais+')%'  
+    
+    BeginSql Alias cRSFT006W         
+        %NoParser%       
+        SELECT  
+            SUBSTRING(FT_FILIAL,1,2) AS 'EMPRESA',
+            FT_FILIAL, M0_FILIAL,
+            CONVERT(CHAR,CONVERT(DATE,FT_ENTRADA, 103 ),103) AS FT_ENTRADA,
+            CONVERT(CHAR,CONVERT(DATE,FT_EMISSAO, 103 ),103) AS FT_EMISSAO, 
+            'SAIDA' AS TIPOMOV, 
+            CASE TG.D2_TIPO
+                WHEN 'N' THEN TG.D2_TIPO + ' - Normal'
+                WHEN 'D' THEN TG.D2_TIPO + ' - Devolucao'
+                WHEN 'B' THEN TG.D2_TIPO + ' - Beneficiamento'
+                WHEN 'I' THEN TG.D2_TIPO + ' - Compl. ICMS'
+                WHEN 'P' THEN TG.D2_TIPO + ' - Compl. IPI'
+                WHEN 'C' THEN TG.D2_TIPO + ' - Compl. Preco/Frete'
+                ELSE TG.D2_TIPO
+            END AS 'TIPO_NF',  
+            FT_ESPECIE,
+            FT_NFISCAL, FT_SERIE, D2_NFORI, D2_SERIORI,
+            FT_CLIEFOR, FT_LOJA,
+            CASE 
+                WHEN TG.D2_TIPO = 'B' OR TG.D2_TIPO = 'D' THEN A2_NOME 
+                ELSE A1_NOME 
+            END AS 'AX_NOME',  
+            CASE 
+                WHEN TG.D2_TIPO = 'B' OR TG.D2_TIPO = 'D' THEN A2_TIPO 
+                ELSE A1_TIPO 
+            END AS 'AX_TIPO',  
+            FT_ESTADO, 
+            FT_CFOP,  X5.X5_DESCRI 'DESC_CFOP',
+            TG.D2_CCUSTO, CC.CTT_DESC01 'DESC_CC', 
+            TG.D2_GRUPO, BM_DESC,
+            FT_PRODUTO, B1_DESC, D2_QUANT, D2_PRUNIT, D2_TOTAL, D2_VALICM,D2_VALIPI, FT_VALCONT, B1_CONTA, CT1.CT1_DESC01 'DESC_CONTA', B1_POSIPI AS 'NCM',
+            CONVERT(CHAR,CONVERT(DATE, NULLIF(FT_DTCANC,''), 103 ),103) AS FT_DTCANC, 
+            FT_OBSERV,
+            FT_CHVNFE,
+            FT_BASEPIS AS 'BASE_PIS'       , FT_ALIQPIS AS 'ALIQ_PIS'       , FT_VALPIS  AS 'VALOR_PIS',  FT_CSTPIS AS 'CST_PIS',
+            FT_BASECOF AS 'BASE_COF'       , FT_ALIQCOF AS 'ALIQ_COF'       , FT_VALCOF  AS 'VALOR_COF',  FT_CSTCOF AS 'CST_COF',
+            FT_BASEICM AS 'BASE_ICM'       , FT_ALIQICM AS 'ALIQ_ICM'       , FT_VALICM  AS 'VALOR_ICM',  FT_ICMSCOM  AS 'VALOR_ICM_COM',
+            FT_BASECSL AS 'BASE_CSL'       , FT_ALIQCSL AS 'ALIQ_CSL'       , FT_VALCSL  AS 'VALOR_CSL', 
+            FT_BASEINS AS 'BASE_INS'       , FT_ALIQINS AS 'ALIQ_INS'       , FT_VALINS  AS 'VALOR_INS',
+            FT_BASEIPI AS 'BASE_IPI'       , FT_ALIQIPI AS 'ALIQ_IPI'       , FT_VALIPI  AS 'VALOR_IPI',
+            FT_BSEFAB  AS 'BASE_FABOV'     , FT_ALQFAB  AS 'ALIQ_FABOV'     , FT_VALFAB  AS 'VALOR_FAB', 
+            FT_BSSENAR AS 'BASE_SENAR'     , FT_ALSENAR AS 'ALIQ_SENAR'     , FT_VLSENAR AS 'VALOR_SENAR', 
+            FT_BASEFUN AS 'BASE_FUNRURAL'  , FT_ALIQFUN AS 'ALIQ_FUNRURAL'  , FT_VALFUN  AS 'VALOR_FUNRURAL',
+            FT_BASEFMD AS 'BASE_FAMAD'     , FT_ALQFMD  AS 'ALIQ_FAMAD'     , FT_VALFMD  AS 'VALOR_FAMAD',
+            COALESCE(NULLIF(FT_BSEFAC,0), TG.BASE_FACS) AS 'BASE_FACS',
+            COALESCE(NULLIF(FT_ALQFAC,0), TG.ALIQ_FACS) AS 'ALIQ_FACS', 
+            COALESCE(NULLIF(FT_VALFAC,0), TG.FACS) AS 'FACS',  
+            COALESCE(NULLIF(FT_BASFASE,0), TG.BASE_FACS) AS 'BASE_FASEMT',
+            COALESCE(NULLIF(FT_ALIFASE,0), TG.ALIQ_FASEMT) AS 'ALIQ_FASEMT', 
+            COALESCE(NULLIF(FT_VALFASE,0), TG.FASEMT) AS 'FASEMT',    
+            TG.BASE_FESAMT, TG.ALIQ_FESAMT, TG.FESAMT,
+            COALESCE(NULLIF(FT_BSEFET,0), TG.BASE_FETHAB) AS 'BASE_FETHAB',
+            COALESCE(NULLIF(FT_ALQFET,0), TG.ALIQ_FETHAB) AS 'ALIQ_FETHAB', 
+            COALESCE(NULLIF(FT_VALFET,0), TG.FETHAB) AS 'FETHAB',   
+            COALESCE(NULLIF(FT_BASIMA,0), TG.BASE_IMAMT) AS 'BASE_IMAMT',
+            COALESCE(NULLIF(FT_ALIIMA,0), TG.ALIQ_IMAMT) AS 'ALIQ_IMAMT', 
+            COALESCE(NULLIF(FT_VALIMA,0), TG.IMAMT) AS 'IMAMT',    
+            COALESCE(FT_BRETPIS,0) AS 'BRETPIS',
+            COALESCE(FT_BRETCOF,0) AS 'BRETCOF',
+            COALESCE(FT_BRETCSL,0) AS 'BRETCSL',
+            COALESCE(FT_VRETPIS,0) AS 'VRETPIS',
+            COALESCE(FT_VRETCOF,0) AS 'VRETCOF',
+            COALESCE(FT_VRETCSL,0) AS 'VRETCSL',
+            TG.BASE_IRF, TG.ALIQ_IRF, TG.IRF   
+        FROM SFT010 AS SFT
+        INNER JOIN (
+            SELECT 
+                D2_FILIAL, D2_DOC, D2_SERIE, D2_CLIENTE, D2_LOJA, D2_ITEM, D2_GRUPO, D2_COD, D2_QUANT, D2_PRUNIT, D2_TOTAL,D2_VALICM,D2_VALIPI,D2_IDTRIB, D2_TIPO, D2_CCUSTO, D2_LOCAL, D2_NFORI, D2_SERIORI,
+                SUM(COALESCE(BASE_FACS,0)) AS 'BASE_FACS',
+                SUM(COALESCE(ALIQ_FACS,0)) AS 'ALIQ_FACS',
+                SUM(COALESCE(FACS,0)) AS 'FACS',
+                SUM(COALESCE(BASE_FESAMT,0)) AS 'BASE_FESAMT',
+                SUM(COALESCE(ALIQ_FESAMT,0)) AS 'ALIQ_FESAMT',
+                SUM(COALESCE(FESAMT,0)) AS 'FESAMT',
+                SUM(COALESCE(BASE_FASEMT,0)) AS 'BASE_FASEMT',
+                SUM(COALESCE(ALIQ_FASEMT,0)) AS 'ALIQ_FASEMT',
+                SUM(COALESCE(FASEMT,0)) AS 'FASEMT',
+                SUM(COALESCE(BASE_FETHAB,0)) AS 'BASE_FETHAB',
+                SUM(COALESCE(ALIQ_FETHAB,0)) AS 'ALIQ_FETHAB',
+                SUM(COALESCE(FETHAB,0)) AS 'FETHAB',
+                SUM(COALESCE(BASE_IMAMT,0)) AS 'BASE_IMAMT',
+                SUM(COALESCE(ALIQ_IMAMT,0)) AS 'ALIQ_IMAMT',
+                SUM(COALESCE(IMAMT,0)) AS 'IMAMT',
+                SUM(COALESCE(BASE_IRF,0)) AS 'BASE_IRF',
+                SUM(COALESCE(ALIQ_IRF,0)) AS 'ALIQ_IRF',
+                SUM(COALESCE(IRF,0)) AS 'IRF'        
+            FROM ( 
+                SELECT 
+                    D2_FILIAL, D2_DOC, D2_SERIE, D2_CLIENTE, D2_LOJA, D2_GRUPO, D2_COD, D2_ITEM, D2_QUANT, D2_PRUNIT, D2_TOTAL,D2_VALICM,D2_VALIPI,D2_IDTRIB, D2_TIPO, D2_CCUSTO,  D2_LOCAL, D2_NFORI, D2_SERIORI,
+                        COALESCE(F2B_TRIB,'') AS F2B_TRIB, COALESCE(F2D_VALOR,2) AS F2D_VALOR,
+                        'ALIQ_'+F2B_TRIB AS 'ALIQ',  F2D_ALIQ,
+                        'BASE_'+F2B_TRIB AS 'BASEIMP', IIF(F2D_BASQTD = 0, F2D_BASE, F2D_BASQTD) AS VLBASE
+                FROM SD2010 AS SD2 WITH(NOLOCK)
+                LEFT JOIN F2D010 AS F2D WITH(NOLOCK)
+                    ON F2D_FILIAL = D2_FILIAL
+                    AND F2D_IDREL = D2_IDTRIB
+                    AND F2D.%NotDel%
+                LEFT JOIN F2B010 AS F2B WITH (NOLOCK)
+                        ON F2D_FILIAL = F2B_FILIAL
+                        AND F2D_TRIB = F2B_REGRA
+                        AND F2D_RFIN = F2B_RFIN
+                        AND F2B.%NotDel%
+                WHERE D2_EMISSAO BETWEEN  %Exp:DToS(MV_PAR01)% AND %Exp:DToS(MV_PAR02)%
+                
+                ) AS NFTRIB
+                PIVOT( 
+                    SUM(F2D_VALOR)
+                    FOR F2B_TRIB IN (FACS,FASEMT,FESAMT,FETHAB,IMAMT,IRF)
+                )AS F2D_VALOR
+                PIVOT( 
+                    SUM(F2D_ALIQ) 
+                    FOR ALIQ IN (ALIQ_FACS,ALIQ_FASEMT,ALIQ_FESAMT,ALIQ_FETHAB,ALIQ_IMAMT,ALIQ_IRF)
+                )AS F2D_ALIQ
+                PIVOT( 
+                    SUM(VLBASE) 
+                    FOR BASEIMP IN (BASE_FACS,BASE_FASEMT,BASE_FESAMT,BASE_FETHAB,BASE_IMAMT,BASE_IRF)
+                )AS F2D_BASE
+            GROUP BY  D2_FILIAL, D2_DOC, D2_SERIE,  D2_CLIENTE, D2_LOJA, D2_ITEM, D2_GRUPO, D2_COD,  D2_QUANT, D2_PRUNIT, D2_TOTAL,D2_VALICM,D2_VALIPI, D2_IDTRIB, D2_TIPO, D2_CCUSTO,  D2_LOCAL, D2_NFORI, D2_SERIORI    ) AS TG
+            ON TG.D2_FILIAL = FT_FILIAL
+            AND TG.D2_DOC = FT_NFISCAL
+            AND TG.D2_SERIE = FT_SERIE
+            AND TG.D2_ITEM = FT_ITEM 
+            AND TG.D2_CLIENTE = FT_CLIEFOR
+        LEFT JOIN SA2010 A2 WITH (NOLOCK)  
+            ON A2_COD = FT_CLIEFOR
+            AND A2_LOJA = FT_LOJA  
+            AND A2.%NotDel%
+        LEFT JOIN SA1010 A1 WITH (NOLOCK)  
+            ON A1_COD = FT_CLIEFOR
+            AND A1_LOJA = FT_LOJA  
+            AND A1.%NotDel%
+        INNER JOIN SB1010 AS SB1 WITH (NOLOCK)
+            ON B1_COD = FT_PRODUTO
+            AND SB1.%NotDel%
+        LEFT JOIN SBM010 AS SBM WITH (NOLOCK)
+            ON BM_GRUPO = TG.D2_GRUPO 
+            AND SBM.%NotDel%
+        LEFT JOIN CTT010 CC WITH (NOLOCK) 
+            ON TG.D2_CCUSTO = CC.CTT_CUSTO AND CC.%NotDel%
+            and CC.%NotDel%
+        LEFT JOIN SX5010 X5 WITH (NOLOCK) 
+            ON X5.%NotDel% AND X5_TABELA + X5_CHAVE =	'13' + FT_CFOP 
+        LEFT JOIN CT1010 CT1 WITH (NOLOCK) 
+            ON SB1.B1_CONTA = CT1.CT1_CONTA AND CT1.%NotDel%
+        INNER JOIN  SYS_COMPANY AS COMPANY
+            ON COMPANY.M0_CODFIL = FT_FILIAL
+            AND COMPANY.%NotDel%
+        WHERE FT_FILIAL IN %Exp:cFiltroFil% 
+            AND FT_EMISSAO BETWEEN  %Exp:DToS(MV_PAR01)% AND %Exp:DToS(MV_PAR02)% 
+            AND FT_TIPOMOV = 'S'
+            AND SFT.%NotDel% 
+        UNION ALL
+        SELECT  
+            SUBSTRING(FT_FILIAL,1,2) AS 'EMPRESA',
+            FT_FILIAL, M0_FILIAL,
+            CONVERT(CHAR,CONVERT(DATE,FT_ENTRADA, 103 ),103) AS FT_ENTRADA,
+            CONVERT(CHAR,CONVERT(DATE,FT_EMISSAO, 103 ),103) AS FT_EMISSAO, 
+            'ENTRADA' AS TIPOMOV, 
+            CASE TG.D1_TIPO
+                WHEN 'N' THEN TG.D1_TIPO + ' - Normal'
+                WHEN 'D' THEN TG.D1_TIPO + ' - Devolucao'
+                WHEN 'B' THEN TG.D1_TIPO + ' - Beneficiamento'
+                WHEN 'I' THEN TG.D1_TIPO + ' - Compl. ICMS'
+                WHEN 'P' THEN TG.D1_TIPO + ' - Compl. IPI'
+                WHEN 'C' THEN TG.D1_TIPO + ' - Compl. Preco/Frete'
+                ELSE TG.D1_TIPO
+            END AS 'TIPO_NF',  
+            FT_ESPECIE,
+            FT_NFISCAL, FT_SERIE, D1_NFORI, D1_SERIORI,
+            FT_CLIEFOR, FT_LOJA,
+            CASE 
+                WHEN TG.D1_TIPO = 'B' OR TG.D1_TIPO = 'D' THEN A1_NOME 
+                ELSE A2_NOME 
+            END AS 'AX_NOME',  
+            CASE 
+                WHEN TG.D1_TIPO = 'B' OR TG.D1_TIPO = 'D' THEN A1_TIPO 
+                ELSE A2_TIPO 
+            END AS 'AX_TIPO',  
+            FT_ESTADO, 
+            FT_CFOP,  X5.X5_DESCRI 'DESC_CFOP',
+            TG.D1_CC, CC.CTT_DESC01 'DESC_CC',
+            TG.D1_GRUPO, BM_DESC,
+            FT_PRODUTO, B1_DESC, D1_QUANT, D1_VUNIT, D1_TOTAL,D1_VALICM,D1_VALIPI,FT_VALCONT,  B1_CONTA, CT1.CT1_DESC01 'DESC_CONTA', B1_POSIPI AS 'N.C.M',
+            CONVERT(CHAR,CONVERT(DATE, NULLIF(FT_DTCANC,''), 103 ),103) AS FT_DTCANC, 
+            FT_OBSERV,
+            FT_CHVNFE,
+            FT_BASEPIS AS 'BASE_PIS'       , FT_ALIQPIS AS 'ALIQ_PIS'       , FT_VALPIS  AS 'VALOR_PIS',  FT_CSTPIS AS 'CST_PIS',
+            FT_BASECOF AS 'BASE_COF'       , FT_ALIQCOF AS 'ALIQ_COF'       , FT_VALCOF  AS 'VALOR_COF',  FT_CSTCOF AS 'CST_COF',
+            FT_BASEICM AS 'BASE_ICM'       , FT_ALIQICM AS 'ALIQ_ICM'       , FT_VALICM  AS 'VALOR_ICM',  FT_ICMSCOM  AS 'VALOR_ICM_COM',
+            FT_BASECSL AS 'BASE_CSL'       , FT_ALIQCSL AS 'ALIQ_CSL'       , FT_VALCSL  AS 'VALOR_CSL', 
+            FT_BASEINS AS 'BASE_INS'       , FT_ALIQINS AS 'ALIQ_INS'       , FT_VALINS  AS 'VALOR_INS',
+            FT_BASEIPI AS 'BASE_IPI'       , FT_ALIQIPI AS 'ALIQ_IPI'       , FT_VALIPI  AS 'VALOR_IPI',
+            FT_BSEFAB  AS 'BASE_FABOV'     , FT_ALQFAB  AS 'ALIQ_FABOV'     , FT_VALFAB  AS 'VALOR_FAB', 
+            FT_BSSENAR AS 'BASE_SENAR'     , FT_ALSENAR AS 'ALIQ_SENAR'     , FT_VLSENAR AS 'VALOR_SENAR', 
+            FT_BASEFUN AS 'BASE_FUNRURAL'  , FT_ALIQFUN AS 'ALIQ_FUNRURAL'  , FT_VALFUN  AS 'VALOR_FUNRURAL',
+            FT_BASEFMD AS 'BASE_FAMAD'     , FT_ALQFMD  AS 'ALIQ_FAMAD'     , FT_VALFMD  AS 'VALOR_FAMAD',
+            COALESCE(NULLIF(FT_BSEFAC,0), TG.BASE_FACS) AS 'BASE_FACS',
+            COALESCE(NULLIF(FT_ALQFAC,0), TG.ALIQ_FACS) AS 'ALIQ_FACS', 
+            COALESCE(NULLIF(FT_VALFAC,0), TG.FACS) AS 'FACS',  
+            COALESCE(NULLIF(FT_BASFASE,0), TG.BASE_FACS) AS 'BASE_FASEMT',
+            COALESCE(NULLIF(FT_ALIFASE,0), TG.ALIQ_FASEMT) AS 'ALIQ_FASEMT', 
+            COALESCE(NULLIF(FT_VALFASE,0), TG.FASEMT) AS 'FASEMT',    
+            TG.BASE_FESAMT, TG.ALIQ_FESAMT, TG.FESAMT,
+            COALESCE(NULLIF(FT_BSEFET,0), TG.BASE_FETHAB) AS 'BASE_FETHAB',
+            COALESCE(NULLIF(FT_ALQFET,0), TG.ALIQ_FETHAB) AS 'ALIQ_FETHAB', 
+            COALESCE(NULLIF(FT_VALFET,0), TG.FETHAB) AS 'FETHAB',   
+            COALESCE(NULLIF(FT_BASIMA,0), TG.BASE_IMAMT) AS 'BASE_IMAMT',
+            COALESCE(NULLIF(FT_ALIIMA,0), TG.ALIQ_IMAMT) AS 'ALIQ_IMAMT', 
+            COALESCE(NULLIF(FT_VALIMA,0), TG.IMAMT) AS 'IMAMT',    
+            COALESCE(FT_BRETPIS,0) AS 'BRETPIS',
+            COALESCE(FT_BRETCOF,0) AS 'BRETCOF',
+            COALESCE(FT_BRETCSL,0) AS 'BRETCSL',
+            COALESCE(FT_VRETPIS,0) AS 'VRETPIS',
+            COALESCE(FT_VRETCOF,0) AS 'VRETCOF',
+            COALESCE(FT_VRETCSL,0) AS 'VRETCSL',
+            TG.BASE_IRF, TG.ALIQ_IRF, TG.IRF   
+        FROM SFT010 AS SFT
+        INNER JOIN (
+            SELECT 
+                D1_FILIAL, D1_DOC, D1_SERIE, D1_FORNECE, D1_LOJA, D1_ITEM, D1_GRUPO, D1_COD, D1_QUANT, D1_VUNIT, D1_TOTAL,D1_VALICM,D1_VALIPI,D1_IDTRIB, D1_TIPO, D1_CC, D1_LOCAL, D1_NFORI, D1_SERIORI,
+                SUM(COALESCE(BASE_FACS,0)) AS 'BASE_FACS',
+                SUM(COALESCE(ALIQ_FACS,0)) AS 'ALIQ_FACS',
+                SUM(COALESCE(FACS,0)) AS 'FACS',
+                SUM(COALESCE(BASE_FESAMT,0)) AS 'BASE_FESAMT',
+                SUM(COALESCE(ALIQ_FESAMT,0)) AS 'ALIQ_FESAMT',
+                SUM(COALESCE(FESAMT,0)) AS 'FESAMT',
+                SUM(COALESCE(BASE_FASEMT,0)) AS 'BASE_FASEMT',
+                SUM(COALESCE(ALIQ_FASEMT,0)) AS 'ALIQ_FASEMT',
+                SUM(COALESCE(FASEMT,0)) AS 'FASEMT',
+                SUM(COALESCE(BASE_FETHAB,0)) AS 'BASE_FETHAB',
+                SUM(COALESCE(ALIQ_FETHAB,0)) AS 'ALIQ_FETHAB',
+                SUM(COALESCE(FETHAB,0)) AS 'FETHAB',
+                SUM(COALESCE(BASE_IMAMT,0)) AS 'BASE_IMAMT',
+                SUM(COALESCE(ALIQ_IMAMT,0)) AS 'ALIQ_IMAMT',
+                SUM(COALESCE(IMAMT,0)) AS 'IMAMT',
+                SUM(COALESCE(BASE_IRF,0)) AS 'BASE_IRF',
+                SUM(COALESCE(ALIQ_IRF,0)) AS 'ALIQ_IRF',
+                SUM(COALESCE(IRF,0)) AS 'IRF'        
+            FROM ( 
+                SELECT 
+                    D1_FILIAL, D1_DOC, D1_SERIE,D1_FORNECE, D1_LOJA, D1_GRUPO, D1_COD, D1_ITEM,  D1_QUANT, D1_VUNIT, D1_TOTAL,D1_VALICM,D1_VALIPI,D1_IDTRIB, D1_TIPO, D1_CC,  D1_LOCAL, D1_NFORI, D1_SERIORI,
+                        COALESCE(F2B_TRIB,'') AS F2B_TRIB, COALESCE(F2D_VALOR,0) AS F2D_VALOR,
+                        'ALIQ_'+F2B_TRIB AS 'ALIQ',  F2D_ALIQ,
+                        'BASE_'+F2B_TRIB AS 'BASEIMP', IIF(F2D_BASQTD = 0, F2D_BASE, F2D_BASQTD) AS VLBASE
+                FROM SD1010 AS SD1 WITH(NOLOCK)
+                LEFT JOIN F2D010 AS F2D WITH(NOLOCK)
+                    ON F2D_FILIAL = D1_FILIAL
+                    AND F2D_IDREL = D1_IDTRIB
+                    AND F2D_IDREL != ''
+                    AND F2D_TABELA = 'SD1'
+                    AND F2D.%NotDel%
+                LEFT JOIN F2B010 AS F2B WITH (NOLOCK)
+                        ON F2D_FILIAL = F2B_FILIAL
+                        AND F2D_TRIB = F2B_REGRA
+                        AND F2D_RFIN = F2B_RFIN
+                        AND F2B.%NotDel%
+                WHERE D1_DTDIGIT BETWEEN  %Exp:DToS(MV_PAR01)% AND %Exp:DToS(MV_PAR02)% AND SD1.%NotDel%
+                
+                ) AS NFTRIB
+                PIVOT( 
+                    SUM(F2D_VALOR)
+                    FOR F2B_TRIB IN (FACS,FASEMT,FESAMT,FETHAB,IMAMT,IRF)
+                )AS F2D_VALOR
+                PIVOT( 
+                    SUM(F2D_ALIQ) 
+                    FOR ALIQ IN (ALIQ_FACS,ALIQ_FASEMT,ALIQ_FESAMT,ALIQ_FETHAB,ALIQ_IMAMT,ALIQ_IRF)
+                )AS F2D_ALIQ
+                PIVOT( 
+                    SUM(VLBASE) 
+                    FOR BASEIMP IN (BASE_FACS,BASE_FASEMT,BASE_FESAMT,BASE_FETHAB,BASE_IMAMT,BASE_IRF)
+                )AS F2D_BASE
+            GROUP BY  D1_FILIAL, D1_DOC, D1_SERIE, D1_FORNECE, D1_LOJA, D1_ITEM, D1_GRUPO, D1_COD, D1_QUANT, D1_VUNIT, D1_TOTAL,D1_VALICM,D1_VALIPI,D1_IDTRIB, D1_TIPO, D1_CC,  D1_LOCAL, D1_NFORI, D1_SERIORI) AS TG
+            ON TG.D1_FILIAL = FT_FILIAL
+            AND TG.D1_DOC = FT_NFISCAL
+            AND TG.D1_SERIE = FT_SERIE
+            AND TG.D1_ITEM = FT_ITEM 
+            AND TG.D1_FORNECE = FT_CLIEFOR
+        LEFT JOIN SA2010 A2 WITH (NOLOCK)  
+            ON A2_COD = FT_CLIEFOR
+            AND A2_LOJA = FT_LOJA  
+            and A2.%NotDel%
+        LEFT JOIN SA1010 A1 WITH (NOLOCK)  
+            ON A1_COD = FT_CLIEFOR
+            AND A1_LOJA = FT_LOJA  
+            and A1.%NotDel%
+        INNER JOIN SB1010 AS SB1 WITH (NOLOCK)
+            ON B1_COD = FT_PRODUTO
+            AND SB1.%NotDel%
+        INNER JOIN SBM010 AS SBM WITH (NOLOCK)
+            ON BM_GRUPO = TG.D1_GRUPO
+            AND SBM.%NotDel%
+        LEFT JOIN CTT010 CC WITH (NOLOCK) 
+            ON TG.D1_CC = CC.CTT_CUSTO AND CC.%NotDel%
+            and CC.%NotDel%
+        LEFT JOIN SX5010 X5 WITH (NOLOCK) 
+            ON X5.%NotDel% AND X5_TABELA + X5_CHAVE =	'13' + FT_CFOP 
+        LEFT JOIN CT1010 CT1 WITH (NOLOCK) 
+            ON SB1.B1_CONTA = CT1.CT1_CONTA AND CT1.%NotDel%
+            and CT1.%NotDel%
+        INNER JOIN  SYS_COMPANY AS COMPANY
+            ON COMPANY.M0_CODFIL = FT_FILIAL
+            AND COMPANY.%NotDel%
+        WHERE FT_FILIAL IN %Exp:cFiltroFil% 
+            AND FT_ENTRADA BETWEEN %Exp:DToS(MV_PAR01)% AND %Exp:DToS(MV_PAR02)% 
+            AND FT_TIPOMOV = 'E'
+            AND SFT.%NotDel%
+      EndSql
+
+    MemoWrite("C:\Temp\",GetLastQuery()[2])
+
+   (cRSFT006W)->(DbGoTop())
+    Count to nTotal
+	ProcRegua(nTotal) 
+    (cRSFT006W)->(DbGoTop())
+ 	
+    If Empty(cError)
+
+        oExcel:SetTitleSizeFont(11) //Define tamanho da fonte do titulo 
+        oExcel:SetTitleBold(.T.) //Define o titulo como em negrito
+        
+        cNomePlan		:= "SFTENTRADASAIDA"
+        cTituloPlan		:= "SFTENTRADASAIDA"
+        
+        oExcel:AddworkSheet(cNomePlan)
+        oExcel:AddTable(cNomePlan,cTituloPlan)
+
+        For nC := 1 To Len(aColunas)
+            oExcel:AddColumn(cNomePlan,cTituloPlan,aColunas[nC][2],aColunas[nC][3],aColunas[nC][4],aColunas[nC][5])
+        Next nC
+
+        While (cRSFT006W)->(!EOF())
+
+            If !Empty(cError)
+                Exit
+            EndIf
+            
+            nAtual++
+
+           IncProc( "Imprimindo Registro - " + cValToChar(nAtual) + " de " + cValToChar( nTotal ) + "..." )
+ 
+            For nC := 1 To Len(aColunas) 
+                Aadd(aRowAdd, (cRSFT006W)->&(aColunas[nC][1])) 
+            Next nC           
+
+            oExcel:AddRow(cNomePlan,cTituloPlan, aRowAdd)
+            aRowAdd := {}
+            
+            (cRSFT006W)->(DBSkip())
+        EndDo 
+    
+
+        (cRSFT006W)->(DbCloseArea())
+    EndIf
+
+    ErrorBlock(oErrorBlock)
+
+     If !Empty(cError)
+        ApMsgInfo(cError)
+    else
+        IncProc( "Salvando XML..." )
+        oExcel:Activate()
+        cFile := cRootDir + "\" + __cName + "_" + DToS(Date())+StrTran(Time(),':','')+'.xml'
+        oExcel:GetXMLFile(cFile)
+        MsgInfo("Arquivo salvo em " + cFile, "Sucesso")
+        shellExecute("Open", IIF(GetOS() == "UNIX","/Applications/Microsoft\ Excel.app","excel"), cFile, cRootDir, 1 )
+    EndIf 
+
+    FreeObj(oExcel)
+    oExcel := NIL 
+	
+Return Nil
+  
+ 
+Static Function ParamRel( cTitle )
+
+    Local lRet      := .F.
+    Local aParam    := {}   
+      
+    aAdd(aParam, { 1, "Data De:"        ,/*init*/CTOD("  /  /    "), "", /*valid*/".T.", "",/*when*/ ".T.", 80, .F.})
+    aAdd(aParam, { 1, "Data Ate:"       ,/*init*/CTOD("  /  /    "), "", /*valid*/".T.", "",/*when*/ ".T.", 80, .T.})  
+
+    lRet := ParamBox(aParam, cTitle, , , , , , , , , .T./*lCanSav*/, .T./*lUserSave*/)
+
+Return lRet
+
+Static Function fArr2String( aArray )
+
+    Local cRet := ""
+
+    If Len(aArray) > 0
+        cRet := AsString(aArray)
+        cRet := StrTran(cRet,"{","'")
+        cRet := StrTran(cRet,"}","'")
+        cRet := StrTran(cRet,",","','")
+    EndIf
+
+Return cRet
+
+
+Static Function GetOS()
+    local stringOS := Upper(GetRmtInfo()[2])
+
+    if GetRemoteType() == 0 .or. GetRemoteType() == 1
+        return "WINDOWS"
+    elseif GetRemoteType() == 2 
+        return "UNIX" // Linux ou MacOS		
+    elseif GetRemoteType() == 5 
+        return "HTML" // Smartclient HTML		
+    elseif ("ANDROID" $ stringOS)
+        return "ANDROID" 
+    elseif ("IPHONEOS" $ stringOS)
+        return "IPHONEOS"
+    endif    
+return ""

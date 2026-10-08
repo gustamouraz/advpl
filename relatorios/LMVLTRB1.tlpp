@@ -1,0 +1,63 @@
+#include "TOTVS.ch"
+
+/*
+@Autor:     Luiz Moura
+@Data:      24/08/2026
+@Descricao: Retorna o tributo, subtotal da nota fiscal e valor vinculado ao
+             identificador de tributo informado.
+
+@Param __cIdTrib, identificador do tributo (F2D_IDREL)
+@Return: array de arrays no formato { F2B_TRIB, CJ2_STOTNF, F2D_VALOR }.
+         Quando nao hoVLTRBuver registro, retorna {{"", 0, 0}}.
+*/
+User Function LMVLTRB1(cTrib,__cIdTrib)
+
+    Local aValores := {}
+    Local cAlias   := GetNextAlias()
+    Local cTribLike := IIf(ValType(cTrib) == "C", AllTrim(cTrib) + "%", "%")
+
+    BeginSql Alias cAlias
+        %noparser%
+        SELECT
+            TRIM(F2B.F2B_TRIB) AS TRIB,
+            TRIM(CJ2.CJ2_STOTNF) AS STOTNF,
+            F2D.F2D_VALOR AS VALOR
+        FROM %Table:F2D% AS F2D
+        LEFT JOIN %Table:F2B% AS F2B
+            ON F2B.F2B_ID = F2D.F2D_IDCAD
+            AND F2B.%NotDel%
+        OUTER APPLY (
+            SELECT TOP 1
+                CJ2X.*
+            FROM %Table:CJ2% AS CJ2X
+            WHERE CJ2X.%NotDel%
+              AND CJ2X.CJ2_CODIGO = F2B.F2B_CODESC
+              AND CJ2X.CJ2_FILIAL = F2B.F2B_FILIAL
+            ORDER BY
+                CJ2X.CJ2_ALTERA DESC,
+                CJ2X.R_E_C_N_O_ DESC
+        ) CJ2
+        WHERE F2D.F2D_IDREL = %Exp:__cIdTrib%
+            AND F2D.%NotDel%
+            AND F2B.F2B_TRIB LIKE %Exp:cTribLike%
+            AND CJ2.CJ2_STOTNF IN ('2','3','4')
+
+    EndSql
+
+    (cAlias)->(DbGoTop())
+    While !(cAlias)->(Eof())
+        aAdd(aValores, {;
+            IIf((cAlias)->TRIB == Nil, "", AllTrim((cAlias)->TRIB)), ;
+            IIf((cAlias)->STOTNF == Nil, "", AllTrim((cAlias)->STOTNF)), ;
+            IIf((cAlias)->VALOR == Nil, 0, (cAlias)->VALOR) ;
+        })
+        (cAlias)->(DbSkip())
+    EndDo
+    (cAlias)->(DbCloseArea())
+
+    // Mantem o contrato de retorno para consumidores que acessam aValores[1][x].
+    If Empty(aValores)
+        aAdd(aValores, {"", "", 0})
+    EndIf
+
+Return aValores

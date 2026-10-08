@@ -1,0 +1,136 @@
+#include "TOTVS.CH"
+
+#define TP_INCLUSAO     3
+#define TP_ALTERACAO    4
+#define TP_EXCLUSAO     5
+
+User Function TM050TOK()
+
+	Local _nTipoOp := PARAMIXB[1]//Tipo de Operação 3=Inclusão;4=Alteração;5=Exclusão;
+		Local lRet      := .T. //também usado no intercompany
+	Local cNumVga   := DTP->DTP_VIAGEM
+	Local cCodVei   := ""
+	Local cCodFor   := ""
+	Local cLojFor   := ""
+	Local cNomeFor  := ""
+	Local cCNPJFor  := ""
+	Local cCodMarca := ""
+	Local cMarcaVei := ""
+	Local cUfPlaca  := ""
+	Local lImpObs   := .F.
+	Local cDTCObs   := M->DTC_OBS
+
+	//INTERCOMPANY
+	Local lIsFil := .T.
+	Local cFilAlias := "TRB2" + GetNextAlias() + StrTran(Time(), ":", "")
+	Local cQry := ""
+	Local cCliCgc := ""
+	Local oQuery as object
+	Local aZncArea := ZNC->(GetArea())
+
+	If _nTipoOp == TP_INCLUSAO
+		If !Empty(cNumVga)
+			cCodVei := Posicione("DTR",1,xFilial("DTR")+cFilant+cNumVga,"DTR_CODVEI")//DTR_FILIAL, DTR_FILORI, DTR_VIAGEM, DTR_ITEM, R_E_C_N_O_, D_E_L_E_T_
+
+			If !Empty(cCodVei)
+				DbSelectArea("DA3") //Veiculos
+				DA3->(DbSetOrder(1)) //DA3_FILIAL, DA3_COD, R_E_C_N_O_, D_E_L_E_T_
+
+				If DA3->(DBSeek(xFilial("DA3")+cCodVei))
+					cCodFor     := DA3->DA3_CODFOR
+					cLojFor     := DA3->DA3_LOJFOR
+					cCodMarca   := DA3->DA3_MARVEI
+					cUfPlaca    := DA3->DA3_ESTPLA
+					cMarcaVei   := Posicione("SX5",1,xFilial("SX5")+"M6"+cCodMarca,"X5_DESCRI")//X5_FILIAL, X5_TABELA, X5_CHAVE, R_E_C_N_O_, D_E_L_E_T_
+
+					DbSelectArea("DUJ") // Contrato Fornecedor
+					DUJ->(DbSetOrder(2))//DUJ_FILIAL, DUJ_CODFOR, DUJ_LOJFOR, DUJ_INIVIG, R_E_C_N_O_, D_E_L_E_T_
+
+					If DUJ->(DbSeek(xFilial("DUJ")+cCodFor+cLojFor))
+						cNomeFor    := DUJ->DUJ_NOMFOR
+						cCNPJFor    := Posicione("SA2",1,xFilial("SA2")+cCodFor+cLojFor,"A2_CGC")///A2_FILIAL, A2_COD, A2_LOJA, R_E_C_N_O_, D_E_L_E_T_
+						lImpObs     := Empty(DUJ->DUJ_FIMVIG) .OR. DateDiffDay(Date(), DUJ->DUJ_FIMVIG) > 0
+					EndIf
+					DUJ->(DbCloseArea())
+				EndIf
+				DA3->(DBCloseArea())
+
+				If lImpObs
+					cDTCObs += " Transporte subcontratado com " + AllTrim(cNomeFor) + " de CNPJ: " + TRANSFORM(cCNPJFor,"@R 99.999.999/9999-99" )
+					cDTCObs += ", proprietario do veiculo marca " + AllTrim(cMarcaVei)
+					cDTCObs += ", placa " + AllTrim(cCodVei) + ", UF " + cUfPlaca
+
+					M->DTC_OBS := Upper(cDTCObs)
+				EndIf
+
+			EndIf
+		EndIf
+	EndIf
+
+	//VALIDAÇÂO INTERCOMPANY
+	DbSelectArea("SA1")
+	SA1->(DbSetOrder(1))
+	If SA1->(DbSeek(xFilial("SA1")+DTC_CLIDEV+DTC_LOJDEV))
+		cCliCgc := SA1->A1_CGC
+	EndIf
+
+	cQry += "SELECT M0_CODIGO, M0_CODFIL FROM SYS_COMPANY SYS" + CRLF
+	cQry += "WHERE SYS.D_E_L_E_T_ = ' ' "     + CRLF
+	cQry += "AND SYS.M0_CGC = ? " + CRLF
+	oQuery := FWPreparedStatement():New(cQry)
+	oQuery:setParams({cCliCgc})
+	MPSysOpenQuery(oQuery:getFixQuery(), cFilAlias)
+
+	(cFilAlias)->(DBGoTop())
+
+	IF !(cFilAlias)->(Eof()) .And. _nTipoOp == 3
+		lRet := ValCamp(lIsFil)
+	ENDIF
+
+	(cFilAlias)->(DbCloseArea())
+
+	ZNC->(DBSETORDER(3))
+	IF ZNC->(DBSEEK(xFilial("ZNC")+DTC_ZNCCOD))
+
+		IF EMPTY(ZNC->ZNC_CC) .AND. EMPTY(DTC_ZCCUST)
+
+			MSGINFO("O campo Centro de Custo, n�o foi preenchido no cadastro de regras fiscais (Cod. "+DTC_ZNCCOD+"), preencha o Centro de Custo na Aba 'Outros'","Atencao!")
+			Return .F.
+
+		ENDIF
+
+	ENDIF
+
+	RestArea(aZncArea)
+
+Return lRet
+
+
+/*/{Protheus.doc} Static Function ValCamp
+    (long_description)
+    Validação para o campo DTC_ZNCCOD ser obrigatório caso seja da filial da regra & validar se o codigo da regra existe
+    @Daniel Victor da Rosa
+    @since 08/04/2024
+/*/
+Static Function ValCamp(lIsFil)
+
+	Local aArea        := FWGetArea()
+	Local lRetOk       := .T.
+
+	If lIsFil
+		If Empty(M->DTC_ZNCCOD)
+			lRetOk := .F.
+			Help(, , "Help", , "Falha ao validar o Codigo da Regra Fiscal", 1, 0, , , , , , {"Verifique o campo Cod. Regra na aba 'OUTROS'"})
+		ELSE
+			DBSELECTAREA("ZNC")
+			ZNC->(DBSETORDER(3))
+			IF !(ZNC->(DBSEEK(xfilial("ZNC")+M->DTC_ZNCCOD)))
+				lRetOk := .F.
+				Help(, , "Help", , "Falha ao validar o Codigo da Regra Fiscal", 1, 0, , , , , , {"Codigo digitado nao existente"})
+			ENDIF
+			ZNC->(DBCLOSEAREA())
+		EndIf
+	EndIf
+	FWRestArea(aArea)
+
+Return lRetOk

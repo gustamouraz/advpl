@@ -1,0 +1,61 @@
+#include "TOTVS.CH"
+ 
+User function XEXECSQL()
+
+    Local cQuerySql     := ""
+    Local oModal        := NIL
+    Local oTMultiget1   := NIL 
+    Local oContainer    := NIL
+    Local oMainWnd      := NIL
+    Local nHeight       := oMainWnd:nClientHeight //aSize[GET_HEIGHT]    //Altura da janela principal
+    Local nWidth        := oMainWnd:nClientWidth //aSize[GET_WIDTH]     //Largura da janela principal 
+    Local aBtnActions   := {}
+
+    oModal  := FWDialogModal():New()       
+    oModal:SetEscClose(.T.)
+    oModal:setTitle("Masutti Dev || Simple SQL Query Exec")
+    oModal:setSubTitle("Version 1.0.0")
+      
+    oModal:SetSize(((nHeight/2) * 0.7), ((nWidth/2)* 0.7))
+    
+    Aadd(aBtnActions, { NIL, "Executar", {|| fExecQuery(@cQuerySql)} , "Executar",,.T.,.T. }) 
+
+    
+    oModal:createDialog()
+    oModal:addButtons( aBtnActions ) 
+    oModal:AddCloseButon(NIL,"Fechar")
+
+    oContainer := FWLayer():New()
+    oContainer:Init(oModal:getPanelMain())
+    oContainer:AddColumn('MAIN_BOARD', 100, .T.)
+    oContainer:AddWindow('MAIN_BOARD','oPanelQry',"Query", 100, /*lEnable*/.F.,/*lFixed*/.F.) 
+
+    oPanelQry := oContainer:GetWinPanel('MAIN_BOARD','oPanelQry') 
+      
+    oTMultiget1 := TMultiget():new( 01, 01, {| u | if( pCount() > 0, cQuerySql := u, cQuerySql ) },  oPanelQry, (oPanelQry:nClientWidth/2) * 0.99, (oPanelQry:nClientHeight/2) * 0.99, , , , , , .T. ) 
+ 
+
+    oModal:Activate()
+
+return
+
+ 
+Static Function fExecQuery(_cQuerySql)
+    
+    Local lRet := .T.
+    Local nStatus := 0
+
+    If !Empty(_cQuerySql)
+
+        TCLink()                    
+        FWMsgRun(,{|| nStatus := TCSqlExec(_cQuerySql)},"Running...","Executing query....")   
+        If (nStatus < 0)
+            lRet := .F.
+            MsgAlert(TCSQLError(), "TCSQLError")
+        else
+            _cQuerySql := ""
+            MsgInfo("Query has been executed.", "Successfully")
+        endif    
+        TCUnlink()
+    EndIf
+Return lRet

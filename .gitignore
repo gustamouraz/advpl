@@ -1,0 +1,13 @@
+# Local development tools and editor state
+.vscode/
+.agents/
+.codex/
+.codex_tmp/
+
+# Environment-specific files and local artefacts
+.env
+.env.*
+*.log
+*.tmp
+*.bak
+desktop.ini

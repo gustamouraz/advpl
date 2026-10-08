@@ -1,0 +1,51 @@
+#include "TOTVS.ch"
+
+
+/*
+@Autor:         Wallyson Silva
+@Data:          27/09/2022
+@Descrição:     Implementado o ponto de entrada F330DTFIN para permitir ao cliente decidir se quer validar a data do parâmetro MV_DATAFIN ou não. 
+                O RdMake precisa apenas retornar:
+                .T.: Para que o sistema efetue a validação;
+                .F.: Para que o sistema ignore a validação;
+*/
+
+User Function F330DTFIN()
+
+    Local lRet      := .T. 
+    Local nPosDolar := 0
+    Local nCotacao  := 0
+    //Local cMsgAsk   := ""
+    
+    //Chamado SE: 010827 - FIXAR PTAX NF SAÍDA NA COMPENSAÇÃO
+    If AllTrim(SE1->E1_TIPO) $ "NF/FT/RC"
+        If Type('aTxMoedas') == "A"               
+            nPosDolar := aScan(aTxMoedas, {|x| x[1] == "DOLAR" })
+            If nPosDolar > 0 
+                nCotacao := RecMoeda(SE1->E1_EMISSAO, 2)
+                If nCotacao > 0                    
+                    // cMsgAsk += "Deseja considerar Ptax da emissão do titulo?" + CRLF
+                    // cMsgAsk += " Ptax Atual:  " + Transform(aTxMoedas[nPosDolar][2],"@E 9,999.9999") + CRLF
+                    // cMsgAsk += " Ptax Emissão:  " + Transform(nCotacao,"@E 9,999.9999") + CRLF
+
+                    // If MsgYesNo(cMsgAsk, "F330PTAX") 
+                    //     aTxMoedas[nPosDolar][2] := nCotacao
+                    // EndIf
+                    aTxMoedas[nPosDolar][2] := nCotacao
+                EndIf
+            EndIf 
+
+            // Adicionado me 31/10/2025
+            // Tratamento para MOEDA3 - Dólar 2
+            nPosDolar2 := aScan(aTxMoedas, {|x| x[1] == "UPF/MT" })
+            If nPosDolar2 > 0 
+                nCotac2 := RecMoeda(SE1->E1_EMISSAO, 3)
+                If nCotac2 > 0                    
+                    aTxMoedas[nPosDolar2][2] := nCotac2
+                EndIf
+            EndIf 
+
+        EndIf
+    EndIf
+
+Return lRet

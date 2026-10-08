@@ -1,0 +1,16 @@
+#Include "TOTVS.CH"
+
+
+User Function MT110COR()
+
+    // Local nX        := 1
+    // Local _aLegenda := PARAMIXB[1]
+    // Local _aNewLeg  := {}
+
+    // aAdd(_aNewLeg,{"C1_APROV != 'B' .AND. EMPTY(C1_RESIDUO) .AND.  C1_QUJE > 0 .AND. C1_QUJE < C1_QUANT .AND. AllTrim(C1_XJUSBLQ) $ 'SC BLOQ. RESIDUO PC'  ","DBG07"}) 
+    
+    // For nX := 1 To Len(_aLegenda)
+    //      aAdd(_aNewLeg,{_aLegenda[nX][1],_aLegenda[nX][2]})
+    // Next nX
+
+Return _aNewLeg

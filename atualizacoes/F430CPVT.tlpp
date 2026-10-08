@@ -1,0 +1,153 @@
+ 
+#Include "TOTVS.ch"
+#include "fileio.ch"
+
+//---------------------------------------------------------------------
+/*/{Protheus.doc} F430CPVT
+//TODO Função criada para gerar o comprovante de pagamento, pelo outras ações
+/*/
+//---------------------------------------------------------------------
+
+User Function F430CPVT()
+ 
+    Local cArqNav       := "" 
+    Local nPort         := 0 
+    Local oModal
+    Local oWebEngine 
+    Local nHeight       := oMainWnd:nClientHeight //aSize[GET_HEIGHT]    //Altura da janela principal
+    Local nWidth        := oMainWnd:nClientWidth //aSize[GET_WIDTH]     //Largura da janela principal 
+    Local oWebChannel   := NIL
+    Local aBtnActions   := {}   
+    Local cFileName     := AllTrim(SE2->E2_FORNECE+SE2->E2_NUM)
+    
+
+    If !Empty(SE2->E2_BAIXA)
+
+        FWMsgRun( , {|| cArqNav := fGerHtmlComprov(cFileName) }, "Processando", "Gerando comprovante....")
+
+        If !Empty(cArqNav)
+
+            oModal  := FWDialogModal():New()       
+            oModal:SetEscClose(.T.)
+            oModal:setTitle("Comprovante Pagamento") 
+            oModal:SetSize(((nHeight/2) * 0.6), ((nWidth/2)* 0.3)) 
+            Aadd(aBtnActions, { NIL, "Gerar PDF", {|| oWebEngine:PrintPDF() } , "Gerar PDF",,.T.,.T. }) 
+
+            oModal:createDialog()
+            oModal:addButtons( aBtnActions ) 
+            oModal:AddCloseButton(NIL,"Fechar")
+
+            oWebChannel := TWebChannel():New()
+            nPort := oWebChannel:connect()
+            //Cria o componente que irÃ¡ carregar a url
+            oWebEngine := TWebEngine():New(oModal:getPanelMain(), 0, 0, 100, 100,/*cUrl*/, nPort) 
+            oWebEngine:SetHtml( MemoRead(cArqNav) )
+            oWebEngine:navigate(cArqNav)
+            oWebEngine:Align := CONTROL_ALIGN_ALLCLIENT
+
+            oModal:Activate()
+
+            FreeObj(oWebEngine)
+            FreeObj(oWebChannel)
+            FreeObj(oModal)
+
+        EndIf  
+    Else 
+        MsgAlert("Titulo selecionado não foi baixado (E2_BAIXA)!", "F430CPVT")
+    EndIf
+    
+Return 
+
+
+Static Function fGerHtmlComprov( __cFileName )
+
+    Local nC            := 1
+    Local cKeyTit       := ""
+    Local aBxTit        := {}
+    Local nHandle       := NIL
+    Local cHtml         := ""
+    Local cArqComprov   := "" 
+
+    cArquivo    := IIF(fTiGetOS() == "UNIX", "i:\tmp\", GetTempPath())  + __cFileName + ".html" 
+    nHandle     := FCreate(cArquivo) 
+
+    If nHandle == -1
+        MsgAlert( 'Falha ao criar arquivo do comprovante: FERROR '+str(ferror(),4), "F430CPVT")
+        Return NIL 
+    EndIf
+    
+    cKeyTit     := SE2->(E2_FILIAL+E2_PREFIXO+E2_NUM+E2_PARCELA+E2_TIPO+E2_FORNECE+E2_LOJA)
+    aBxTit      := fGetAllBx( cKeyTit )
+
+    If Len(aBxTit) > 0
+    
+        cHtml += ' <!DOCTYPE html> ' + CRLF
+        cHtml += ' <html> ' + CRLF
+        cHtml += '  <body > ' + CRLF 
+
+        For nC := 1 To Len(aBxTit)
+
+            SE5->(DbSetOrder(7))//E5_FILIAL, E5_PREFIXO, E5_NUMERO, E5_PARCELA, E5_TIPO, E5_CLIFOR, E5_LOJA, E5_SEQ, R_E_C_N_O_, D_E_L_E_T_
+            SE5->(DbSeek(aBxTit[nC]))
+
+            SA6->(DbSetOrder(1))//A6_FILIAL, A6_COD, A6_AGENCIA, A6_NUMCON, R_E_C_N_O_, D_E_L_E_T_
+            SA6->(DbSeek(xFilial("SA6")+SE5->E5_BANCO+SE5->E5_AGENCIA+SE5->E5_CONTA))
+
+            cHtml += U_R430CPVT(.T.)
+
+        Next nC 
+
+        cHtml += '  </body> ' + CRLF 
+        cHtml += ' </html> ' + CRLF 
+
+        FSeek(nHandle, 0, FS_END)
+        FWrite(nHandle, cHtml)
+        FClose(nHandle)
+
+        cArqComprov := IIF(fTiGetOS() == "UNIX", "file://", "") + GetTempPath()  + __cFileName + ".html" 
+    Else
+        MsgAlert("Não foi encontrada nenhuma baixa para esse titulo", "F430CPVT")
+    EndIf 
+Return cArqComprov
+
+Static Function fGetAllBx( __cKeyTit ) //SE2->(E2_FILIAL+E2_PREFIXO+E2_NUM+E2_PARCELA+E2_TIPO+E2_FORNECE+E2_LOJA)
+
+    Local aKeyBx    := {}
+    Local cAliasE5  := GetNextAlias()
+
+    BeginSql Alias cAliasE5
+        SELECT 
+            E5_FILIAL+E5_PREFIXO+E5_NUMERO+E5_PARCELA+E5_TIPO+E5_CLIFOR+E5_LOJA+E5_SEQ AS 'BXKEY'
+        FROM %Table:SE5% AS SE5
+        WHERE E5_FILIAL+E5_PREFIXO+E5_NUMERO+E5_PARCELA+E5_TIPO+E5_CLIFOR+E5_LOJA = %Exp:__cKeyTit%
+            AND (( E5_ARQCNAB != '' AND E5_MOTBX = 'DEB' ) OR (E5_TIPO = 'PA ' AND E5_MOTBX = 'NOR' ) OR ( E5_ORIGEM = 'FINA718' AND E5_AUTBCO <> ' ')) 
+            AND E5_RECPAG = 'P'
+            AND E5_DTCANBX = ''
+            AND SE5.%NotDel%
+    EndSql
+
+    (cAliasE5)->(DbGoTop())
+    While (cAliasE5)->(!EOF())
+        Aadd(aKeyBx, (cAliasE5)->BXKEY)
+        (cAliasE5)->(DbSkip())
+    EndDo
+    (cAliasE5)->(DbCloseArea())
+
+Return aKeyBx
+
+
+Static Function fTiGetOS()
+    local stringOS := Upper(GetRmtInfo()[2])
+
+    if GetRemoteType() == 0 .or. GetRemoteType() == 1
+        return "WINDOWS"
+    elseif GetRemoteType() == 2 
+        return "UNIX" // Linux ou MacOS		
+    elseif GetRemoteType() == 5 
+        return "HTML" // Smartclient HTML		
+    elseif ("ANDROID" $ stringOS)
+        return "ANDROID" 
+    elseif ("IPHONEOS" $ stringOS)
+        return "IPHONEOS"
+    endif    
+return ""

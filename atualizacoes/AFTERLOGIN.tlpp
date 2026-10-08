@@ -1,0 +1,172 @@
+#include "TOTVS.CH"
+
+User Function AfterLogin()
+
+	Local __cEnvDefault := SuperGetMv("MV_XENVDEF",.F.,"QKQQVJ")
+	Local __cEnvCurrent := ""
+	Local __cUserId 	:= PARAMIXB[1] 
+	Local __cUserPerm 	:= SuperGetMv("MV_XUSRENV",.F.,"000000")
+	Local lRet := .T.
+	Local cAmb  := ""
+	Local lVldMV:= SUPERGETMV("MV_XVLDMV",.F.)
+	Local lAtiCad:= SUPERGETMV("MV_XCADPART",.F.,.F.) // WENDEL BARRETO 
+	Local nX
+	Local _cUserGrp := UsrRetGrp(__cUserId)
+	Default cMyAlias	:= GetNextAlias()
+	Public __lExecFunc
+	Public __cExecNova
+	Default __lExecFunc := .F.
+	Default __cExecNova := "N"
+	
+	/*  VLAMBUSR() 
+		@Autor:     Luiz Moura
+		@Data:      20/06/2022
+		@Descric: Funcao responsavel por bloquear a cesso a usuarios não cadastrados na ZMP a acessar o ambiente, exceto QKQQVJ
+	*/
+
+	// U_VLAMBUSR()
+
+	/*  ACAFTLOG() 
+		@Autor:     Andr Claro
+		@Data:      19/09/2022
+		@Descric: Funao responsvel por alertar o usurio aprovador de Capex pendente.
+	*/
+		
+	U_ACAFTLOG()  
+
+
+	/* ACMAT084(_lAut, _aCabSAI, _aGridSAI, _aGridDBK)
+		@Autor:     Andr Claro
+		@Data:      19/09/2022
+		@Descric:   Funo responsvel por incluir um solicitante que de forma automtica.
+		Se receber o _lAut como .T., ser feita incluso padro para o usurio caso ele ainda no exista no cadastro 
+		na filial logada.
+	*/
+
+	IF lAtiCad 
+	U_ACMAT084(.T.)
+	ENDIF
+
+//U_ACMAT095()
+
+	If __lExecFunc == NIL
+		__lExecFunc := .F.
+	EndIf
+	
+	If __lExecFunc
+		
+		If __cExecNova == "S"
+			
+			lContinua := .T.
+			
+			While lContinua
+				&(__cFunName+"()")
+				lContinua 	:= MsgYesNo("Deseja executar novamente?")
+				_lCheckD100 := .F.
+			EndDo
+			
+		Else
+			&(__cFunName+"()")
+		EndIf
+		
+		Final("")
+	Else 
+		__cEnvCurrent 	:= AllTrim(StrToArray(TPH_HEAD->H_NAME,'--')[2])//TPH_HEAD->H_NAME 
+		
+		/*If !(__cEnvCurrent $ __cEnvDefault) 
+			If !(__cUserId $ __cUserPerm) 
+				Help("",1,"ATENO!",,"Acesso restrito! Ambiente no liberado para uso.", 1, 0,Nil,Nil,Nil,Nil,Nil,{"MV_XUSRENV"})
+				FWMsgRun(,{||fFakeMail()},"Aguarde...","Enviando E-MAIL para administrador...")		
+				Final("")
+			EndIf
+		EndIf*/
+	EndIf
+
+//Ajustes para verificar Parametros e Moeda
+if Posicione("SM2", 1, DToS(DATE()), "M2_MOEDA2") = 0
+    lRet := U_APTAXC5()
+    if !(lRet)
+        MSGINFO('Falha ao carregar a taxa da Moeda, favor verificar', 'Falha [AfterLogin - Moeda] ')
+    ENDIF
+endif
+
+//if !(SuperGetMv("MV_PCNFE"))
+//	PUTMV("MV_PCNFE", .T.)
+//ENDIF
+
+if !(SuperGetMv("MV_VCHVNFE"))
+	PUTMV("MV_VCHVNFE", .T.)
+ENDIF
+
+if !(SuperGetMv("MV_DCHVNFE"))
+	PUTMV("MV_DCHVNFE", .T.)
+ENDIF
+
+
+//Se for base de Homologao
+if lVldMV
+/*
+for nX := 1 to LEN( GetIniSessions("TOTVSAPPSERVER.INI"))
+	cAmb +=  GetIniSessions("TOTVSAPPSERVER.INI")[nX] + CRLF
+next
+memowrite(gettemppath()+'logaft.txt',cAmb)
+*/
+cAmb :=  SubStr(getSrvInfo()[1],1,6)
+if  cAmb != '136123'
+	BeginSql alias cMyAlias	
+	%noparser%  	
+	SELECT X6_VAR , X6_FIL
+	FROM SX6010 WITH(NOLOCK) 
+	WHERE D_E_L_E_T_ = '' AND  X6_VAR IN 
+	(
+	'MV_SPEDURL',
+	'MV_TAFSURL',
+	'MV_EAIURL2'
+	)
+	AND
+    (X6_CONTEUD LIKE '%132250%' OR X6_CONTEUD LIKE '%prod%')
+	EndSql	
+	(cMyAlias)->(DbGoTop())
+	While (cMyAlias)->(!EOF())
+		if alltrim((cMyAlias)->(X6_FIL)) <> ''
+			if len(alltrim((cMyAlias)->(X6_FIL))) = 2
+				cFilAnt := alltrim((cMyAlias)->(X6_FIL)) + '0101'
+			elseif len(alltrim((cMyAlias)->(X6_FIL))) = 4
+				cFilAnt := alltrim((cMyAlias)->(X6_FIL)) + '01'
+			elseif len(alltrim((cMyAlias)->(X6_FIL))) = 6
+				cFilAnt := alltrim((cMyAlias)->(X6_FIL))
+			endif
+		PUTMV(alltrim((cMyAlias)->(X6_VAR)), '')
+		else
+		PUTMV(alltrim((cMyAlias)->(X6_VAR)), '')	
+		endif
+	(cMyAlias)->(DbSkip())
+	ENDDO
+	(cMyAlias)->(dbCloseArea())
+
+	endif
+endif
+
+
+	IF !EMPTY(CFILANT) .AND. DTOS(DATE()) >= '20240101'
+		If ExistBlock("ACRETZGW")
+			//IF CFILANT $  SuperGetMv("MV_XFILBLQ",.F.,'010101;010102;010103;010105;010107;010110;010111;010115;010116;060104;060105;060108;060109;060113') ;
+			If !U_ACRETZGW(cFilAnt, cEmpAnt)	.AND. !(_cUserGrp[1] $  SuperGetMv("MV_XUSRPF",.F.,"000000")) 
+				Final('Ateno - Verifique o Cadastro    @ Controle de Filiais ','Usuario Sem Permisso para essa filial. Entre com contato com a Controladoria!' )
+			ENDIF
+		Else
+			IF CFILANT $  SuperGetMv("MV_XFILBLQ",.F.,'010101;010102;010103;010105;010107;010110;010111;010115;010116;060104;060105;060108;060109;060113') ;
+						.AND. !(_cUserGrp[1] $  SuperGetMv("MV_XUSRPF",.F.,"000000")) 
+				Final('Ateno - Verifique o Cadastro    @ Controle de Filiais ','Usuario Sem Permisso para essa filial. Entre com contato com a Controladoria!' )
+			ENDIF		
+		EndIf
+	ENDIF
+
+
+Return
+
+
+
+Static Function fFakeMail()
+	Sleep(6000)
+Return 
